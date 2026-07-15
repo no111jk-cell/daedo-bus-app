@@ -4,7 +4,7 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>대도여객 노선 조회</title>
-  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=f1393db0848c0e62fb05cb92d3fabe28&libraries=services,clusterer"></script>
+  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=f1393db0848c0e62fb05cb92d3fabe28&libraries=services"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Malgun Gothic', sans-serif; background: #f0f4f8; color: #222; }
@@ -25,23 +25,35 @@
     .panel { display: none; }
     .panel.active { display: block; }
 
-    /* ── 지도 ── */
+    /* 지도 */
     #map-panel { position: relative; }
     #map { width: 100%; height: calc(100vh - 104px); }
     #map-controls {
       position: absolute; top: 10px; left: 10px; z-index: 10;
       background: rgba(255,255,255,0.97); border-radius: 8px;
       padding: 12px 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-      width: 210px;
+      width: 220px;
     }
-    #map-controls > label { font-size: 12px; font-weight: 700; color: #1a56a0; display: block; margin-bottom: 6px; }
-    .route-check-list { max-height: 55vh; overflow-y: auto; }
-    .route-check-item {
+    #map-controls > .ctrl-title {
+      font-size: 12px; font-weight: 700; color: #1a56a0;
+      margin-bottom: 6px; display: block;
+    }
+    /* 사내통칭 그룹 */
+    .group-header {
+      font-size: 12px; font-weight: 700; padding: 4px 2px 2px;
+      margin-top: 4px; cursor: pointer;
       display: flex; align-items: center; gap: 6px;
-      padding: 3px 2px; font-size: 12px; cursor: pointer;
     }
-    .route-check-item input { width: 14px; height: 14px; cursor: pointer; accent-color: #1a56a0; }
-    .route-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .group-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .group-arrow { margin-left: auto; font-size: 10px; color: #888; }
+    .variant-list { padding-left: 16px; display: none; }
+    .variant-list.open { display: block; }
+    .variant-item {
+      display: flex; align-items: center; gap: 5px;
+      padding: 2px 0; font-size: 11px; cursor: pointer;
+    }
+    .variant-item input { width: 13px; height: 13px; cursor: pointer; }
+    .route-check-list { max-height: 60vh; overflow-y: auto; }
     .map-btn-row { display: flex; gap: 5px; margin-top: 8px; }
     .map-btn {
       flex: 1; padding: 5px 0; font-size: 11px;
@@ -49,7 +61,7 @@
     }
     .map-btn:hover { background: #e8eef8; border-color: #1a56a0; color: #1a56a0; }
 
-    /* ── 시간표 ── */
+    /* 시간표 */
     #timetable-panel { padding: 14px; }
     .filter-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
     .filter-row select {
@@ -68,24 +80,16 @@
     }
     .stat-box .val { font-size: 18px; font-weight: 700; color: #1a56a0; }
     .stat-box .lbl { font-size: 11px; color: #666; margin-top: 2px; }
-    .timetable-wrap {
-      background: #fff; border-radius: 10px;
-      overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-    }
+    .timetable-wrap { background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
     .timetable-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; }
-    .timetable-wrap thead th {
-      background: #1a56a0; color: #fff; padding: 10px 8px; text-align: center; font-size: 12px;
-    }
+    .timetable-wrap thead th { background: #1a56a0; color: #fff; padding: 10px 8px; text-align: center; font-size: 12px; }
     .timetable-wrap tbody tr:nth-child(even) { background: #f7faff; }
     .timetable-wrap tbody td { padding: 8px; text-align: center; border-bottom: 1px solid #eee; }
     .timetable-wrap tbody td.note-cell { font-size: 11px; color: #888; text-align: left; }
-    .seq-badge {
-      display: inline-block; background: #1a56a0; color: #fff;
-      border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 700;
-    }
+    .seq-badge { display: inline-block; background: #1a56a0; color: #fff; border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
     .empty-msg { text-align: center; padding: 40px; color: #aaa; font-size: 14px; }
 
-    /* ── 노선요약 ── */
+    /* 노선요약 */
     #summary-panel { padding: 14px; }
     .scard {
       background: #fff; border-radius: 10px; padding: 14px 16px;
@@ -99,18 +103,6 @@
     .scard-right { text-align: right; }
     .scard-right .times { font-size: 13px; font-weight: 600; }
     .scard-right .counts { font-size: 11px; color: #666; margin-top: 2px; }
-
-    /* 정류장 커스텀 오버레이 */
-    .stop-label {
-      background: rgba(255,255,255,0.92);
-      border: 1.5px solid #1a56a0;
-      border-radius: 4px;
-      padding: 2px 5px;
-      font-size: 10px;
-      font-weight: 600;
-      white-space: nowrap;
-      pointer-events: none;
-    }
   </style>
 </head>
 <body>
@@ -133,7 +125,7 @@
 <!-- 지도 -->
 <div id="map-panel" class="panel active">
   <div id="map-controls">
-    <label>🚌 노선 선택 (복수 가능)</label>
+    <span class="ctrl-title">🚌 노선 선택 (변형별)</span>
     <div class="route-check-list" id="route-check-list"></div>
     <div class="map-btn-row">
       <button class="map-btn" onclick="selectAll()">전체 선택</button>
@@ -167,7 +159,6 @@
 </div>
 
 <script>
-// ━━━━ 상수 ━━━━
 const COLORS = {
   '시내순환3번':'#e53935','시내순환3-1번':'#ef6c00',
   '시내순환4번':'#c62828','시내순환4-1번':'#e91e63',
@@ -180,14 +171,12 @@ const COLORS = {
   '서곡32번':'#00695c','50번(한정면허)':'#ad1457'
 };
 
-// ━━━━ 전역 ━━━━
-let busData = null;      // bus_data.json
-let routePaths = null;   // route_paths.json (TAGO 정류장 순서+좌표)
+let busData = null;
+let routePaths = null;
 let kakaoMap = null;
-let overlays = {};       // { routeName: { polylines:[], markers:[], customs:[] } }
-let iwOpen = null;       // 현재 열린 인포윈도우
+let overlays = {};  // { "sachin||varName": { polyline, markers, customs } }
+let iwOpen = null;
 
-// ━━━━ 초기화 ━━━━
 window.onload = async function() {
   kakao.maps.load(function() {
     kakaoMap = new kakao.maps.Map(document.getElementById('map'), {
@@ -195,7 +184,6 @@ window.onload = async function() {
       level: 7
     });
     kakaoMap.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
-    // 지도 클릭 시 열린 인포윈도우 닫기
     kakao.maps.event.addListener(kakaoMap, 'click', () => { if(iwOpen) iwOpen.close(); });
   });
 
@@ -210,117 +198,124 @@ window.onload = async function() {
   buildTTSelect();
   buildSummaryCards();
   document.getElementById('data-note').textContent =
-    `운행기록부 26.5.11판 | ${bd.routes.length}개 노선`;
+    `운행기록부 26.5.11판 | ${bd.routes.length}개 노선 · ${Object.keys(rp).length}개 그룹`;
 };
 
-// ━━━━ 체크박스 목록 ━━━━
+// ── 체크박스 목록: 사내통칭 그룹 → 변형 펼침 ──
 function buildCheckList() {
   const wrap = document.getElementById('route-check-list');
-  busData.routes.forEach(route => {
-    const color = COLORS[route] || '#999';
-    const d = document.createElement('div');
-    d.className = 'route-check-item';
-    const id = 'chk_' + route.replace(/[^a-zA-Z0-9가-힣]/g,'_');
-    d.innerHTML = `
-      <input type="checkbox" id="${id}" value="${route}" onchange="onCheck(this)">
-      <div class="route-dot" style="background:${color}"></div>
-      <label for="${id}" style="cursor:pointer;flex:1">${route}</label>`;
-    wrap.appendChild(d);
-  });
+  for (const [sachin, variants] of Object.entries(routePaths)) {
+    const color = COLORS[sachin] || '#999';
+    const varNames = Object.keys(variants);
+
+    // 그룹 헤더
+    const header = document.createElement('div');
+    header.className = 'group-header';
+    header.innerHTML = `
+      <div class="group-dot" style="background:${color}"></div>
+      <span style="color:${color};flex:1">${sachin}</span>
+      <span class="group-arrow">▶</span>`;
+    const vlist = document.createElement('div');
+    vlist.className = 'variant-list';
+    header.onclick = () => {
+      vlist.classList.toggle('open');
+      header.querySelector('.group-arrow').textContent =
+        vlist.classList.contains('open') ? '▼' : '▶';
+    };
+    wrap.appendChild(header);
+
+    // 변형 체크박스
+    varNames.forEach(vname => {
+      const item = document.createElement('div');
+      item.className = 'variant-item';
+      const uid = 'chk_' + (sachin + vname).replace(/[^a-zA-Z0-9가-힣]/g,'_');
+      item.innerHTML = `
+        <input type="checkbox" id="${uid}" data-sachin="${sachin}" data-var="${vname}" onchange="onCheck(this)">
+        <label for="${uid}" style="cursor:pointer">${vname}</label>`;
+      vlist.appendChild(item);
+    });
+    wrap.appendChild(vlist);
+  }
 }
 
 function onCheck(chk) {
-  chk.checked ? showRoute(chk.value) : hideRoute(chk.value);
+  const sachin = chk.dataset.sachin;
+  const vname  = chk.dataset.var;
+  chk.checked ? showVariant(sachin, vname) : hideVariant(sachin, vname);
 }
 
-// ━━━━ 노선 표시 ━━━━
-function showRoute(routeName) {
-  if (overlays[routeName]) return; // 이미 표시 중
+function showVariant(sachin, vname) {
+  const key = sachin + '||' + vname;
+  if (overlays[key]) return;
 
-  const color = COLORS[routeName] || '#1a56a0';
-  const subRoutes = routePaths[routeName];
-  if (!subRoutes) return;
+  const content = routePaths[sachin]?.[vname];
+  if (!content) return;
 
-  overlays[routeName] = { polylines: [], markers: [], customs: [] };
+  const color = COLORS[sachin] || '#1a56a0';
+  const path  = content.path;
+  const stops = content.stops;
 
-  // 노선번호별 경로 (복수 가능: 예 신림 21~25번)
-  Object.entries(subRoutes).forEach(([routeNo, stops]) => {
-    if (!stops || stops.length < 2) return;
+  overlays[key] = { polylines:[], markers:[], customs:[] };
 
-    // 폴리라인
-    const path = stops.map(s => new kakao.maps.LatLng(s.lat, s.lng));
-    const line = new kakao.maps.Polyline({
-      path, strokeWeight: 5, strokeColor: color,
-      strokeOpacity: 0.85, strokeStyle: 'solid', map: kakaoMap
+  // 폴리라인
+  const linePath = path.map(c => new kakao.maps.LatLng(c[0], c[1]));
+  const line = new kakao.maps.Polyline({
+    path: linePath, strokeWeight: 5, strokeColor: color,
+    strokeOpacity: 0.8, strokeStyle: 'solid', map: kakaoMap
+  });
+  overlays[key].polylines.push(line);
+
+  // 정류장 마커
+  stops.forEach((s, i) => {
+    if (!s.lat || !s.lng) return;
+    const pos = new kakao.maps.LatLng(s.lat, s.lng);
+    const isTerminal = (i === 0 || i === stops.length - 1);
+    const iw = new kakao.maps.InfoWindow({
+      content: `<div style="padding:5px 9px;font-size:12px;white-space:nowrap">
+        <b style="color:${color}">${s.name}</b>
+        <span style="color:#888;font-size:11px"> ${isTerminal ? (i===0?'🚌기점':'🏁종점') : s.seq+'번째'} · ${s.dir||''}</span><br>
+        <span style="font-size:11px;color:#555">${vname}</span>
+      </div>`, removable: true
     });
-    overlays[routeName].polylines.push(line);
 
-    // 정류장 마커 + 인포윈도우
-    stops.forEach((s, i) => {
-      const pos = new kakao.maps.LatLng(s.lat, s.lng);
-      const isTerminal = (i === 0 || i === stops.length - 1);
-
-      // 기점·종점: 일반 마커
-      // 중간 정류장: 작은 원 커스텀오버레이
-      if (isTerminal) {
-        const marker = new kakao.maps.Marker({ position: pos, map: kakaoMap });
-        const iw = new kakao.maps.InfoWindow({
-          content: `<div style="padding:5px 9px;font-size:12px;font-weight:700;color:${color};white-space:nowrap">
-            ${i===0?'🚌 기점':'🏁 종점'} ${s.name}<br>
-            <span style="font-weight:400;font-size:11px;color:#555">${routeName} (${routeNo}번)</span>
-          </div>`,
-          removable: true
-        });
-        kakao.maps.event.addListener(marker, 'click', () => {
-          if (iwOpen) iwOpen.close();
-          iw.open(kakaoMap, marker);
-          iwOpen = iw;
-        });
-        overlays[routeName].markers.push(marker);
-      } else {
-        // 중간 정류장: 작은 원
-        const dot = new kakao.maps.CustomOverlay({
-          position: pos,
-          content: `<div style="width:8px;height:8px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.4);cursor:pointer" title="${s.name}"></div>`,
-          zIndex: 3
-        });
-        dot.setMap(kakaoMap);
-
-        // 클릭용 마커 (투명)
-        const marker = new kakao.maps.Marker({
-          position: pos, map: kakaoMap,
-          image: new kakao.maps.MarkerImage(
-            'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
-            new kakao.maps.Size(14, 14)
-          )
-        });
-        const iw = new kakao.maps.InfoWindow({
-          content: `<div style="padding:5px 9px;font-size:12px;white-space:nowrap">
-            <b style="color:${color}">${s.name}</b>
-            <span style="color:#888;font-size:11px"> (${routeNo}번 ${s.seq}번째)</span>
-          </div>`,
-          removable: true
-        });
-        kakao.maps.event.addListener(marker, 'click', () => {
-          if (iwOpen) iwOpen.close();
-          iw.open(kakaoMap, marker);
-          iwOpen = iw;
-        });
-        overlays[routeName].customs.push(dot);
-        overlays[routeName].markers.push(marker);
-      }
-    });
+    if (isTerminal) {
+      const marker = new kakao.maps.Marker({ position: pos, map: kakaoMap });
+      kakao.maps.event.addListener(marker, 'click', () => {
+        if(iwOpen) iwOpen.close(); iw.open(kakaoMap, marker); iwOpen = iw;
+      });
+      overlays[key].markers.push(marker);
+    } else {
+      const dot = new kakao.maps.CustomOverlay({
+        position: pos,
+        content: `<div style="width:7px;height:7px;border-radius:50%;background:${color};border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.4);cursor:pointer"></div>`,
+        zIndex: 3
+      });
+      dot.setMap(kakaoMap);
+      const marker = new kakao.maps.Marker({
+        position: pos, map: kakaoMap,
+        image: new kakao.maps.MarkerImage(
+          'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+          new kakao.maps.Size(14,14)
+        )
+      });
+      kakao.maps.event.addListener(marker, 'click', () => {
+        if(iwOpen) iwOpen.close(); iw.open(kakaoMap, marker); iwOpen = iw;
+      });
+      overlays[key].customs.push(dot);
+      overlays[key].markers.push(marker);
+    }
   });
 
   fitBoundsAll();
 }
 
-function hideRoute(routeName) {
-  if (!overlays[routeName]) return;
-  overlays[routeName].polylines.forEach(p => p.setMap(null));
-  overlays[routeName].markers.forEach(m => m.setMap(null));
-  overlays[routeName].customs.forEach(c => c.setMap(null));
-  delete overlays[routeName];
+function hideVariant(sachin, vname) {
+  const key = sachin + '||' + vname;
+  if (!overlays[key]) return;
+  overlays[key].polylines.forEach(p => p.setMap(null));
+  overlays[key].markers.forEach(m => m.setMap(null));
+  overlays[key].customs.forEach(c => c.setMap(null));
+  delete overlays[key];
 }
 
 function fitBoundsAll() {
@@ -333,17 +328,19 @@ function fitBoundsAll() {
 }
 
 function selectAll() {
-  document.querySelectorAll('#route-check-list input').forEach(c => {
-    if (!c.checked) { c.checked=true; showRoute(c.value); }
+  document.querySelectorAll('#route-check-list input[type=checkbox]').forEach(c => {
+    if (!c.checked) { c.checked=true; showVariant(c.dataset.sachin, c.dataset.var); }
   });
+  document.querySelectorAll('.variant-list').forEach(v => v.classList.add('open'));
+  document.querySelectorAll('.group-arrow').forEach(a => a.textContent='▼');
 }
 function clearAll() {
-  document.querySelectorAll('#route-check-list input').forEach(c => {
-    if (c.checked) { c.checked=false; hideRoute(c.value); }
+  document.querySelectorAll('#route-check-list input[type=checkbox]').forEach(c => {
+    if (c.checked) { c.checked=false; hideVariant(c.dataset.sachin, c.dataset.var); }
   });
 }
 
-// ━━━━ 탭 전환 ━━━━
+// ── 탭 ──
 function switchTab(tab, btn) {
   document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
@@ -352,7 +349,7 @@ function switchTab(tab, btn) {
   if (tab==='map' && kakaoMap) setTimeout(()=>kakaoMap.relayout(),100);
 }
 
-// ━━━━ 시간표 ━━━━
+// ── 시간표 ──
 function buildTTSelect() {
   const sel = document.getElementById('tt-route');
   busData.routes.forEach(r => {
@@ -360,7 +357,6 @@ function buildTTSelect() {
     o.value=r; o.textContent=r; sel.appendChild(o);
   });
 }
-
 function onTTFilter() {
   const route = document.getElementById('tt-route').value;
   const day   = document.getElementById('tt-day').value;
@@ -369,9 +365,8 @@ function onTTFilter() {
     document.getElementById('tt-table').innerHTML='<div class="empty-msg">노선과 요일을 선택하면 시간표가 표시됩니다.</div>';
     return;
   }
-  const key  = `${route}||${day}`;
-  const rows = busData.timetable[key];
-  if (!rows||rows.length===0) {
+  const rows = busData.timetable[`${route}||${day}`];
+  if (!rows||!rows.length) {
     const alts = Object.keys(busData.timetable).filter(k=>k.startsWith(route+'||'));
     document.getElementById('tt-summary').innerHTML='';
     document.getElementById('tt-table').innerHTML = alts.length
@@ -401,7 +396,7 @@ function onTTFilter() {
   document.getElementById('tt-table').innerHTML=html+'</tbody></table>';
 }
 
-// ━━━━ 노선요약 ━━━━
+// ── 노선요약 ──
 function buildSummaryCards() {
   if (!busData?.summary) return;
   let html='';
@@ -421,7 +416,6 @@ function buildSummaryCards() {
   });
   document.getElementById('summary-grid').innerHTML=html||'<div class="empty-msg">데이터 없음</div>';
 }
-
 function jumpToTT(route, day) {
   document.getElementById('tt-route').value=route;
   const ds=document.getElementById('tt-day');
@@ -430,8 +424,7 @@ function jumpToTT(route, day) {
   document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('timetable-panel').classList.add('active');
   document.querySelectorAll('.tab-btn')[1].classList.add('active');
-  onTTFilter();
-  window.scrollTo(0,0);
+  onTTFilter(); window.scrollTo(0,0);
 }
 </script>
 </body>
