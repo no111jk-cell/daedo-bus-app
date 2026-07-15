@@ -4,251 +4,150 @@
   <meta charset="utf-8"/>
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>대도여객 노선 조회</title>
-  <!-- 카카오맵 API: 발급받은 JavaScript Key로 교체 -->
-  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=f1393db0848c0e62fb05cb92d3fabe28&libraries=services"></script>
+  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=f1393db0848c0e62fb05cb92d3fabe28&libraries=services,clusterer"></script>
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Malgun Gothic', sans-serif; background: #f0f4f8; color: #222; }
-
-    /* ── 헤더 ── */
     header {
-      background: #1a56a0;
-      color: #fff;
-      padding: 12px 16px;
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      box-shadow: 0 2px 6px rgba(0,0,0,0.3);
+      background: #1a56a0; color: #fff;
+      padding: 12px 16px; display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3); position: relative; z-index: 100;
     }
     header h1 { font-size: 17px; font-weight: 700; }
-    header span { font-size: 12px; opacity: 0.75; margin-left: auto; }
-
-    /* ── 탭 ── */
-    .tab-bar {
-      display: flex;
-      background: #fff;
-      border-bottom: 2px solid #e0e0e0;
-    }
+    header span { font-size: 11px; opacity: 0.75; margin-left: auto; }
+    .tab-bar { display: flex; background: #fff; border-bottom: 2px solid #e0e0e0; position: relative; z-index: 100; }
     .tab-btn {
-      flex: 1;
-      padding: 11px 0;
-      font-size: 14px;
-      font-weight: 600;
-      border: none;
-      background: none;
-      cursor: pointer;
-      color: #888;
-      transition: color 0.2s, border-bottom 0.2s;
+      flex: 1; padding: 11px 0; font-size: 14px; font-weight: 600;
+      border: none; background: none; cursor: pointer; color: #888;
       border-bottom: 3px solid transparent;
     }
     .tab-btn.active { color: #1a56a0; border-bottom: 3px solid #1a56a0; }
-
-    /* ── 패널 ── */
     .panel { display: none; }
     .panel.active { display: block; }
 
-    /* ── 지도 패널 ── */
+    /* ── 지도 ── */
     #map-panel { position: relative; }
     #map { width: 100%; height: calc(100vh - 104px); }
-    #map-legend {
-      position: absolute;
-      bottom: 12px;
-      right: 10px;
-      background: rgba(255,255,255,0.95);
-      border-radius: 8px;
-      padding: 10px 12px;
-      font-size: 11px;
-      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-      max-width: 180px;
+    #map-controls {
+      position: absolute; top: 10px; left: 10px; z-index: 10;
+      background: rgba(255,255,255,0.97); border-radius: 8px;
+      padding: 12px 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      width: 210px;
     }
-    #map-legend b { display: block; margin-bottom: 6px; font-size: 12px; }
-    .legend-item { display: flex; align-items: center; gap: 6px; margin: 3px 0; }
-    .legend-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    #map-controls > label { font-size: 12px; font-weight: 700; color: #1a56a0; display: block; margin-bottom: 6px; }
+    .route-check-list { max-height: 55vh; overflow-y: auto; }
+    .route-check-item {
+      display: flex; align-items: center; gap: 6px;
+      padding: 3px 2px; font-size: 12px; cursor: pointer;
+    }
+    .route-check-item input { width: 14px; height: 14px; cursor: pointer; accent-color: #1a56a0; }
+    .route-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .map-btn-row { display: flex; gap: 5px; margin-top: 8px; }
+    .map-btn {
+      flex: 1; padding: 5px 0; font-size: 11px;
+      border: 1px solid #ccc; border-radius: 4px; background: #f5f5f5; cursor: pointer;
+    }
+    .map-btn:hover { background: #e8eef8; border-color: #1a56a0; color: #1a56a0; }
 
-    /* ── 노선 선택 오버레이 (지도 위) ── */
-    #route-selector-map {
-      position: absolute;
-      top: 10px;
-      left: 10px;
-      z-index: 10;
-      background: rgba(255,255,255,0.97);
-      border-radius: 8px;
-      padding: 10px 12px;
-      box-shadow: 0 2px 10px rgba(0,0,0,0.2);
-      min-width: 200px;
-    }
-    #route-selector-map select {
-      display: block;
-      width: 100%;
-      margin-top: 5px;
-      padding: 6px 8px;
-      font-size: 13px;
-      border: 1px solid #ccc;
-      border-radius: 4px;
-    }
-    #route-selector-map label { font-size: 12px; font-weight: 700; color: #1a56a0; }
-
-    /* ── 시간표 패널 ── */
+    /* ── 시간표 ── */
     #timetable-panel { padding: 14px; }
-    .filter-row {
-      display: flex;
-      gap: 8px;
-      margin-bottom: 14px;
-      flex-wrap: wrap;
-    }
+    .filter-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
     .filter-row select {
-      flex: 1;
-      min-width: 140px;
-      padding: 9px 10px;
-      font-size: 14px;
-      border: 1px solid #ccc;
-      border-radius: 6px;
-      background: #fff;
+      flex: 1; min-width: 140px; padding: 9px 10px;
+      font-size: 14px; border: 1px solid #ccc; border-radius: 6px; background: #fff;
     }
-
-    /* 노선 요약 카드 */
     .summary-card {
-      background: #fff;
-      border-radius: 10px;
-      padding: 14px 16px;
-      margin-bottom: 14px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
+      background: #fff; border-radius: 10px; padding: 14px 16px;
+      margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      display: flex; flex-wrap: wrap; gap: 10px;
     }
-    .summary-card .card-title {
-      width: 100%;
-      font-size: 15px;
-      font-weight: 700;
-      color: #1a56a0;
-      margin-bottom: 4px;
-    }
+    .summary-card .card-title { width: 100%; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
     .stat-box {
-      background: #f0f4f8;
-      border-radius: 6px;
-      padding: 8px 14px;
-      text-align: center;
-      flex: 1;
-      min-width: 80px;
+      background: #f0f4f8; border-radius: 6px; padding: 8px 14px;
+      text-align: center; flex: 1; min-width: 80px;
     }
     .stat-box .val { font-size: 18px; font-weight: 700; color: #1a56a0; }
     .stat-box .lbl { font-size: 11px; color: #666; margin-top: 2px; }
-
-    /* 시간표 테이블 */
     .timetable-wrap {
-      background: #fff;
-      border-radius: 10px;
-      overflow: hidden;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      background: #fff; border-radius: 10px;
+      overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
     }
-    .timetable-wrap table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 13px;
-    }
+    .timetable-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; }
     .timetable-wrap thead th {
-      background: #1a56a0;
-      color: #fff;
-      padding: 10px 8px;
-      text-align: center;
-      font-size: 12px;
+      background: #1a56a0; color: #fff; padding: 10px 8px; text-align: center; font-size: 12px;
     }
     .timetable-wrap tbody tr:nth-child(even) { background: #f7faff; }
-    .timetable-wrap tbody td {
-      padding: 8px 8px;
-      text-align: center;
-      border-bottom: 1px solid #eee;
-      font-size: 13px;
-    }
-    .timetable-wrap tbody td.note-cell {
-      font-size: 11px;
-      color: #888;
-      text-align: left;
-    }
+    .timetable-wrap tbody td { padding: 8px; text-align: center; border-bottom: 1px solid #eee; }
+    .timetable-wrap tbody td.note-cell { font-size: 11px; color: #888; text-align: left; }
     .seq-badge {
-      display: inline-block;
-      background: #1a56a0;
-      color: #fff;
-      border-radius: 12px;
-      padding: 2px 8px;
-      font-size: 11px;
-      font-weight: 700;
+      display: inline-block; background: #1a56a0; color: #fff;
+      border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 700;
     }
-    .empty-msg {
-      text-align: center;
-      padding: 40px;
-      color: #aaa;
-      font-size: 14px;
-    }
+    .empty-msg { text-align: center; padding: 40px; color: #aaa; font-size: 14px; }
 
-    /* ── 노선요약 패널 ── */
+    /* ── 노선요약 ── */
     #summary-panel { padding: 14px; }
-    .summary-grid { display: flex; flex-direction: column; gap: 10px; }
     .scard {
-      background: #fff;
-      border-radius: 10px;
-      padding: 14px 16px;
-      box-shadow: 0 1px 4px rgba(0,0,0,0.1);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      cursor: pointer;
-      transition: box-shadow 0.15s;
+      background: #fff; border-radius: 10px; padding: 14px 16px;
+      margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      display: flex; justify-content: space-between; align-items: center;
+      cursor: pointer; transition: box-shadow 0.15s;
     }
     .scard:hover { box-shadow: 0 3px 12px rgba(26,86,160,0.2); }
-    .scard-left .route-name { font-size: 14px; font-weight: 700; color: #1a56a0; }
+    .scard-left .route-name { font-size: 14px; font-weight: 700; }
     .scard-left .day-type { font-size: 11px; color: #888; margin-top: 2px; }
     .scard-right { text-align: right; }
     .scard-right .times { font-size: 13px; font-weight: 600; }
     .scard-right .counts { font-size: 11px; color: #666; margin-top: 2px; }
 
-    /* 말풍선 */
-    .kakao-infowindow { font-family: 'Malgun Gothic', sans-serif; }
+    /* 정류장 커스텀 오버레이 */
+    .stop-label {
+      background: rgba(255,255,255,0.92);
+      border: 1.5px solid #1a56a0;
+      border-radius: 4px;
+      padding: 2px 5px;
+      font-size: 10px;
+      font-weight: 600;
+      white-space: nowrap;
+      pointer-events: none;
+    }
   </style>
 </head>
 <body>
 
 <header>
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2">
-    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/>
+    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+    <polyline points="9 22 9 12 15 12 15 22"/>
   </svg>
   <h1>대도여객 노선 조회</h1>
-  <span id="data-note">데이터 로딩 중…</span>
+  <span id="data-note">로딩 중…</span>
 </header>
 
 <div class="tab-bar">
-  <button class="tab-btn active" onclick="switchTab('map')">🗺 지도</button>
-  <button class="tab-btn" onclick="switchTab('timetable')">🕐 시간표</button>
-  <button class="tab-btn" onclick="switchTab('summary')">📋 노선요약</button>
+  <button class="tab-btn active" onclick="switchTab('map',this)">🗺 지도</button>
+  <button class="tab-btn" onclick="switchTab('timetable',this)">🕐 시간표</button>
+  <button class="tab-btn" onclick="switchTab('summary',this)">📋 노선요약</button>
 </div>
 
-<!-- 지도 패널 -->
+<!-- 지도 -->
 <div id="map-panel" class="panel active">
-  <div id="route-selector-map">
-    <label>노선 선택</label>
-    <select id="map-route-select" onchange="onMapRouteChange()">
-      <option value="">── 노선을 선택하세요 ──</option>
-    </select>
+  <div id="map-controls">
+    <label>🚌 노선 선택 (복수 가능)</label>
+    <div class="route-check-list" id="route-check-list"></div>
+    <div class="map-btn-row">
+      <button class="map-btn" onclick="selectAll()">전체 선택</button>
+      <button class="map-btn" onclick="clearAll()">전체 해제</button>
+    </div>
   </div>
   <div id="map"></div>
-  <div id="map-legend">
-    <b>🚌 노선 범례</b>
-    <div class="legend-item"><div class="legend-dot" style="background:#e53935"></div>시내순환(3·4번계)</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#1a56a0"></div>혁신지구(13·16번)</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#2e7d32"></div>매지리(31·34계열)</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#f57c00"></div>신림(21~25번대)</div>
-    <div class="legend-item"><div class="legend-dot" style="background:#6a1b9a"></div>연대30·90·기타</div>
-  </div>
 </div>
 
-<!-- 시간표 패널 -->
+<!-- 시간표 -->
 <div id="timetable-panel" class="panel">
   <div class="filter-row">
-    <select id="tt-route" onchange="onTimetableFilter()">
-      <option value="">── 노선 선택 ──</option>
-    </select>
-    <select id="tt-day" onchange="onTimetableFilter()">
+    <select id="tt-route" onchange="onTTFilter()"><option value="">── 노선 선택 ──</option></select>
+    <select id="tt-day" onchange="onTTFilter()">
       <option value="">── 요일 선택 ──</option>
       <option value="평일(학기중)">평일(학기중)</option>
       <option value="휴일/방학">휴일/방학</option>
@@ -256,366 +155,262 @@
       <option value="매일(공통)">매일(공통)</option>
     </select>
   </div>
-  <div id="tt-summary-card"></div>
-  <div id="tt-table-wrap" class="timetable-wrap">
-    <div class="empty-msg">노선과 요일을 선택하면<br>시간표가 표시됩니다.</div>
+  <div id="tt-summary"></div>
+  <div id="tt-table" class="timetable-wrap">
+    <div class="empty-msg">노선과 요일을 선택하면 시간표가 표시됩니다.</div>
   </div>
 </div>
 
-<!-- 노선요약 패널 -->
+<!-- 노선요약 -->
 <div id="summary-panel" class="panel">
-  <div class="summary-grid" id="summary-grid">
-    <div class="empty-msg">데이터 로딩 중…</div>
-  </div>
+  <div id="summary-grid"><div class="empty-msg">로딩 중…</div></div>
 </div>
 
 <script>
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  전역 상태
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-let busData = null;
+// ━━━━ 상수 ━━━━
+const COLORS = {
+  '시내순환3번':'#e53935','시내순환3-1번':'#ef6c00',
+  '시내순환4번':'#c62828','시내순환4-1번':'#e91e63',
+  '혁신순환16번':'#1a56a0','혁신순환16-1번':'#1565c0','혁신지선13번':'#0d47a1',
+  '귀래31·34 매지리':'#2e7d32',
+  '신림(21~25번대)':'#f57c00',
+  '연대30번':'#6a1b9a','한라대90번':'#7b1fa2',
+  '100-2번 기업도시':'#00838f',
+  '성문사81번':'#4e342e','82번':'#795548',
+  '서곡32번':'#00695c','50번(한정면허)':'#ad1457'
+};
+
+// ━━━━ 전역 ━━━━
+let busData = null;      // bus_data.json
+let routePaths = null;   // route_paths.json (TAGO 정류장 순서+좌표)
 let kakaoMap = null;
-let mapMarkers = [];
-let mapPolylines = [];
+let overlays = {};       // { routeName: { polylines:[], markers:[], customs:[] } }
+let iwOpen = null;       // 현재 열린 인포윈도우
 
-// 노선별 색상
-const ROUTE_COLORS = {
-  '시내순환3번': '#e53935', '시내순환3-1번': '#e53935',
-  '시내순환4번': '#c62828', '시내순환4-1번': '#c62828',
-  '혁신순환16번': '#1a56a0', '혁신순환16-1번': '#1565c0', '혁신지선13번': '#0d47a1',
-  '귀래31·34 매지리': '#2e7d32',
-  '신림(21~25번대)': '#f57c00',
-  '연대30번': '#6a1b9a', '한라대90번': '#7b1fa2',
-  '100-2번 기업도시': '#00838f',
-  '성문사81번': '#4e342e', '82번': '#795548',
-  '서곡32번': '#00695c',
-  '50번(한정면허)': '#ad1457'
-};
-
-// 원주시 주요 정류장 좌표 (TAGO API 실측 기반)
-const STOP_COORDS = {
-  '원주터미널': [37.3422, 127.9201],
-  '원주역': [37.3324, 127.9454],
-  '혁신도시': [37.3170, 127.9580],
-  '연세대': [37.3196, 127.9387],
-  '한라대': [37.3283, 127.9088],
-  '단계동': [37.3520, 127.9310],
-  '무실동': [37.3580, 127.9270],
-  '학성동': [37.3460, 127.9360],
-  '아랫거리': [37.3132, 127.9307],
-  '신림면사무소': [37.2583, 127.9088],
-  '회촌': [37.3789, 127.9578],
-  '서곡': [37.3631, 127.9131],
-  '태장동': [37.3700, 127.9450],
-};
-
-// 노선별 경유 좌표 (GPS 핵심 지점 기반, 단순화)
-const ROUTE_PATHS = {
-  '시내순환3번': [
-    [37.3422, 127.9201],[37.3460, 127.9360],[37.3520, 127.9310],[37.3580, 127.9270],[37.3631, 127.9131],[37.3422, 127.9201]
-  ],
-  '시내순환4번': [
-    [37.3422, 127.9201],[37.3460, 127.9360],[37.3520, 127.9310],[37.3580, 127.9270],[37.3631, 127.9131],[37.3422, 127.9201]
-  ],
-  '혁신순환16번': [
-    [37.3422, 127.9201],[37.3324, 127.9454],[37.3196, 127.9387],[37.3170, 127.9580],[37.3283, 127.9088],[37.3422, 127.9201]
-  ],
-  '혁신지선13번': [
-    [37.3460, 127.9360],[37.3324, 127.9454],[37.3196, 127.9387],[37.3170, 127.9580]
-  ],
-  '혁신순환16-1번': [
-    [37.3422, 127.9201],[37.3196, 127.9387],[37.3170, 127.9580],[37.3283, 127.9088]
-  ],
-  '귀래31·34 매지리': [
-    [37.3422, 127.9201],[37.3460, 127.9360],[37.3700, 127.9450],[37.3789, 127.9578],[37.4100, 127.9650]
-  ],
-  '신림(21~25번대)': [
-    [37.3422, 127.9201],[37.3283, 127.9088],[37.3132, 127.9307],[37.2583, 127.9088]
-  ],
-  '연대30번': [
-    [37.3422, 127.9201],[37.3196, 127.9387],[37.3283, 127.9088],[37.3422, 127.9201]
-  ],
-  '한라대90번': [
-    [37.3422, 127.9201],[37.3324, 127.9454],[37.3283, 127.9088],[37.3170, 127.9580]
-  ],
-  '서곡32번': [
-    [37.3422, 127.9201],[37.3631, 127.9131],[37.3700, 127.9050]
-  ],
-  '100-2번 기업도시': [
-    [37.3422, 127.9201],[37.3324, 127.9454],[37.3170, 127.9580]
-  ],
-  '성문사81번': [
-    [37.3422, 127.9201],[37.3460, 127.9360],[37.3640, 127.9500]
-  ],
-  '82번': [
-    [37.3422, 127.9201],[37.3196, 127.9387],[37.3050, 127.9200]
-  ],
-  '50번(한정면허)': [
-    [37.3422, 127.9201],[37.3283, 127.9088],[37.2900, 127.9100]
-  ],
-};
-
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  초기화
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-window.onload = function() {
-  // 카카오맵 초기화
+// ━━━━ 초기화 ━━━━
+window.onload = async function() {
   kakao.maps.load(function() {
-    const container = document.getElementById('map');
-    const options = {
-      center: new kakao.maps.LatLng(37.3422, 127.9201), // 원주터미널 기준
+    kakaoMap = new kakao.maps.Map(document.getElementById('map'), {
+      center: new kakao.maps.LatLng(37.3422, 127.9201),
       level: 7
-    };
-    kakaoMap = new kakao.maps.Map(container, options);
+    });
+    kakaoMap.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+    // 지도 클릭 시 열린 인포윈도우 닫기
+    kakao.maps.event.addListener(kakaoMap, 'click', () => { if(iwOpen) iwOpen.close(); });
   });
 
-  // 버스 데이터 로드
-  fetch('bus_data.json')
-    .then(r => r.json())
-    .then(data => {
-      busData = data;
-      initUI();
-      document.getElementById('data-note').textContent =
-        `데이터 기준: 운행기록부 26.5.11판 (${data.routes.length}개 노선)`;
-    })
-    .catch(e => {
-      document.getElementById('data-note').textContent = '데이터 로드 실패';
-      console.error(e);
-    });
+  const [bd, rp] = await Promise.all([
+    fetch('bus_data.json').then(r=>r.json()),
+    fetch('route_paths.json').then(r=>r.json())
+  ]);
+  busData = bd;
+  routePaths = rp;
+
+  buildCheckList();
+  buildTTSelect();
+  buildSummaryCards();
+  document.getElementById('data-note').textContent =
+    `운행기록부 26.5.11판 | ${bd.routes.length}개 노선`;
 };
 
-function initUI() {
-  // 노선 선택박스 채우기
-  const routes = busData.routes;
-  ['map-route-select', 'tt-route'].forEach(id => {
-    const sel = document.getElementById(id);
-    routes.forEach(r => {
-      const opt = document.createElement('option');
-      opt.value = r;
-      opt.textContent = r;
-      sel.appendChild(opt);
-    });
+// ━━━━ 체크박스 목록 ━━━━
+function buildCheckList() {
+  const wrap = document.getElementById('route-check-list');
+  busData.routes.forEach(route => {
+    const color = COLORS[route] || '#999';
+    const d = document.createElement('div');
+    d.className = 'route-check-item';
+    const id = 'chk_' + route.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+    d.innerHTML = `
+      <input type="checkbox" id="${id}" value="${route}" onchange="onCheck(this)">
+      <div class="route-dot" style="background:${color}"></div>
+      <label for="${id}" style="cursor:pointer;flex:1">${route}</label>`;
+    wrap.appendChild(d);
   });
-
-  // 노선요약 카드 렌더링
-  renderSummaryCards();
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  탭 전환
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function switchTab(tab) {
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
-  document.getElementById(tab + '-panel').classList.add('active');
-  event.currentTarget.classList.add('active');
-
-  // 지도 탭으로 돌아올 때 리사이즈
-  if (tab === 'map' && kakaoMap) {
-    setTimeout(() => kakaoMap.relayout(), 100);
-  }
+function onCheck(chk) {
+  chk.checked ? showRoute(chk.value) : hideRoute(chk.value);
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  지도: 노선 선택
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function onMapRouteChange() {
-  const route = document.getElementById('map-route-select').value;
-  clearMapOverlays();
-  if (!route) return;
+// ━━━━ 노선 표시 ━━━━
+function showRoute(routeName) {
+  if (overlays[routeName]) return; // 이미 표시 중
 
-  const color = ROUTE_COLORS[route] || '#1a56a0';
-  const path = ROUTE_PATHS[route];
+  const color = COLORS[routeName] || '#1a56a0';
+  const subRoutes = routePaths[routeName];
+  if (!subRoutes) return;
 
-  if (path && path.length > 1) {
-    const linePath = path.map(c => new kakao.maps.LatLng(c[0], c[1]));
-    const polyline = new kakao.maps.Polyline({
-      path: linePath,
-      strokeWeight: 5,
-      strokeColor: color,
-      strokeOpacity: 0.85,
-      strokeStyle: 'solid'
+  overlays[routeName] = { polylines: [], markers: [], customs: [] };
+
+  // 노선번호별 경로 (복수 가능: 예 신림 21~25번)
+  Object.entries(subRoutes).forEach(([routeNo, stops]) => {
+    if (!stops || stops.length < 2) return;
+
+    // 폴리라인
+    const path = stops.map(s => new kakao.maps.LatLng(s.lat, s.lng));
+    const line = new kakao.maps.Polyline({
+      path, strokeWeight: 5, strokeColor: color,
+      strokeOpacity: 0.85, strokeStyle: 'solid', map: kakaoMap
     });
-    polyline.setMap(kakaoMap);
-    mapPolylines.push(polyline);
+    overlays[routeName].polylines.push(line);
 
-    // 정류장 마커
-    path.forEach((c, i) => {
-      const marker = new kakao.maps.Marker({
-        position: new kakao.maps.LatLng(c[0], c[1]),
-        map: kakaoMap
-      });
-      mapMarkers.push(marker);
+    // 정류장 마커 + 인포윈도우
+    stops.forEach((s, i) => {
+      const pos = new kakao.maps.LatLng(s.lat, s.lng);
+      const isTerminal = (i === 0 || i === stops.length - 1);
 
-      // 첫/끝 마커에 정류장명 표시
-      if (i === 0 || i === path.length - 1) {
-        const stopName = getStopName(c);
-        const infoContent = `<div style="padding:5px 8px;font-size:12px;font-weight:700;color:${color}">${stopName}</div>`;
-        const infowindow = new kakao.maps.InfoWindow({ content: infoContent, removable: false });
-        infowindow.open(kakaoMap, marker);
-        mapMarkers.push({ infowindow, marker });
+      // 기점·종점: 일반 마커
+      // 중간 정류장: 작은 원 커스텀오버레이
+      if (isTerminal) {
+        const marker = new kakao.maps.Marker({ position: pos, map: kakaoMap });
+        const iw = new kakao.maps.InfoWindow({
+          content: `<div style="padding:5px 9px;font-size:12px;font-weight:700;color:${color};white-space:nowrap">
+            ${i===0?'🚌 기점':'🏁 종점'} ${s.name}<br>
+            <span style="font-weight:400;font-size:11px;color:#555">${routeName} (${routeNo}번)</span>
+          </div>`,
+          removable: true
+        });
+        kakao.maps.event.addListener(marker, 'click', () => {
+          if (iwOpen) iwOpen.close();
+          iw.open(kakaoMap, marker);
+          iwOpen = iw;
+        });
+        overlays[routeName].markers.push(marker);
+      } else {
+        // 중간 정류장: 작은 원
+        const dot = new kakao.maps.CustomOverlay({
+          position: pos,
+          content: `<div style="width:8px;height:8px;border-radius:50%;background:${color};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.4);cursor:pointer" title="${s.name}"></div>`,
+          zIndex: 3
+        });
+        dot.setMap(kakaoMap);
+
+        // 클릭용 마커 (투명)
+        const marker = new kakao.maps.Marker({
+          position: pos, map: kakaoMap,
+          image: new kakao.maps.MarkerImage(
+            'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
+            new kakao.maps.Size(14, 14)
+          )
+        });
+        const iw = new kakao.maps.InfoWindow({
+          content: `<div style="padding:5px 9px;font-size:12px;white-space:nowrap">
+            <b style="color:${color}">${s.name}</b>
+            <span style="color:#888;font-size:11px"> (${routeNo}번 ${s.seq}번째)</span>
+          </div>`,
+          removable: true
+        });
+        kakao.maps.event.addListener(marker, 'click', () => {
+          if (iwOpen) iwOpen.close();
+          iw.open(kakaoMap, marker);
+          iwOpen = iw;
+        });
+        overlays[routeName].customs.push(dot);
+        overlays[routeName].markers.push(marker);
       }
     });
-
-    // 지도 범위 자동 조정
-    const bounds = new kakao.maps.LatLngBounds();
-    path.forEach(c => bounds.extend(new kakao.maps.LatLng(c[0], c[1])));
-    kakaoMap.setBounds(bounds);
-  }
-
-  // 해당 노선 시간표 요약 인포윈도우 표시
-  const summaryKey = findSummaryKey(route);
-  if (summaryKey) {
-    const s = busData.summary.find(x => x['조회키'] && x['조회키'].startsWith(route));
-    if (s) {
-      const center = path ? path[Math.floor(path.length/2)] : [37.3422, 127.9201];
-      const infoContent = `
-        <div style="padding:8px 12px;font-size:12px;min-width:140px">
-          <b style="color:${color}">${route}</b><br>
-          🕐 첫차 ${s['첫 출발']} / 막차 ${s['마지막 출발']}<br>
-          🔁 총 ${s['총 운행횟수']}회
-        </div>`;
-      const iw = new kakao.maps.InfoWindow({
-        position: new kakao.maps.LatLng(center[0], center[1]),
-        content: infoContent
-      });
-      iw.open(kakaoMap);
-      mapMarkers.push({ infowindow: iw });
-    }
-  }
-}
-
-function clearMapOverlays() {
-  mapMarkers.forEach(m => {
-    if (m.infowindow) m.infowindow.close();
-    if (m.setMap) m.setMap(null);
   });
-  mapPolylines.forEach(p => p.setMap(null));
-  mapMarkers = [];
-  mapPolylines = [];
+
+  fitBoundsAll();
 }
 
-function getStopName(coords) {
-  for (const [name, c] of Object.entries(STOP_COORDS)) {
-    const dist = Math.sqrt(Math.pow(c[0]-coords[0],2)+Math.pow(c[1]-coords[1],2));
-    if (dist < 0.003) return name;
-  }
-  return '정류장';
+function hideRoute(routeName) {
+  if (!overlays[routeName]) return;
+  overlays[routeName].polylines.forEach(p => p.setMap(null));
+  overlays[routeName].markers.forEach(m => m.setMap(null));
+  overlays[routeName].customs.forEach(c => c.setMap(null));
+  delete overlays[routeName];
 }
 
-function findSummaryKey(route) {
-  return (busData.summary || []).find(s => s['조회키'] && s['조회키'].startsWith(route));
+function fitBoundsAll() {
+  const bounds = new kakao.maps.LatLngBounds();
+  let any = false;
+  Object.values(overlays).forEach(ov => {
+    ov.polylines.forEach(p => { p.getPath().forEach(ll => { bounds.extend(ll); any=true; }); });
+  });
+  if (any) kakaoMap.setBounds(bounds);
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  시간표 조회
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function onTimetableFilter() {
+function selectAll() {
+  document.querySelectorAll('#route-check-list input').forEach(c => {
+    if (!c.checked) { c.checked=true; showRoute(c.value); }
+  });
+}
+function clearAll() {
+  document.querySelectorAll('#route-check-list input').forEach(c => {
+    if (c.checked) { c.checked=false; hideRoute(c.value); }
+  });
+}
+
+// ━━━━ 탭 전환 ━━━━
+function switchTab(tab, btn) {
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById(tab+'-panel').classList.add('active');
+  btn.classList.add('active');
+  if (tab==='map' && kakaoMap) setTimeout(()=>kakaoMap.relayout(),100);
+}
+
+// ━━━━ 시간표 ━━━━
+function buildTTSelect() {
+  const sel = document.getElementById('tt-route');
+  busData.routes.forEach(r => {
+    const o = document.createElement('option');
+    o.value=r; o.textContent=r; sel.appendChild(o);
+  });
+}
+
+function onTTFilter() {
   const route = document.getElementById('tt-route').value;
-  const day = document.getElementById('tt-day').value;
-
-  if (!route || !day) {
-    document.getElementById('tt-summary-card').innerHTML = '';
-    document.getElementById('tt-table-wrap').innerHTML =
-      '<div class="empty-msg">노선과 요일을 선택하면<br>시간표가 표시됩니다.</div>';
+  const day   = document.getElementById('tt-day').value;
+  if (!route||!day) {
+    document.getElementById('tt-summary').innerHTML='';
+    document.getElementById('tt-table').innerHTML='<div class="empty-msg">노선과 요일을 선택하면 시간표가 표시됩니다.</div>';
     return;
   }
-
-  const key = `${route}||${day}`;
+  const key  = `${route}||${day}`;
   const rows = busData.timetable[key];
-
-  if (!rows || rows.length === 0) {
-    // 해당 요일 데이터 없음 → 매일(공통) 등 다른 키 시도
-    const fallbackKeys = Object.keys(busData.timetable).filter(k => k.startsWith(route + '||'));
-    if (fallbackKeys.length > 0) {
-      const altKey = fallbackKeys[0];
-      const altDay = altKey.split('||')[1];
-      document.getElementById('tt-table-wrap').innerHTML =
-        `<div class="empty-msg">선택한 요일 데이터가 없습니다.<br>이 노선은 "${altDay}" 데이터만 있습니다.<br>요일 선택을 변경해주세요.</div>`;
-    } else {
-      document.getElementById('tt-table-wrap').innerHTML =
-        '<div class="empty-msg">해당 노선·요일 시간표 데이터가 없습니다.</div>';
-    }
-    document.getElementById('tt-summary-card').innerHTML = '';
+  if (!rows||rows.length===0) {
+    const alts = Object.keys(busData.timetable).filter(k=>k.startsWith(route+'||'));
+    document.getElementById('tt-summary').innerHTML='';
+    document.getElementById('tt-table').innerHTML = alts.length
+      ? `<div class="empty-msg">선택 요일 데이터 없음.<br>이 노선은 <b>"${alts[0].split('||')[1]}"</b> 데이터만 있습니다.</div>`
+      : '<div class="empty-msg">데이터 없음</div>';
     return;
   }
-
-  // 요약 카드
-  const summary = busData.summary.find(s => s['조회키'] === `${route} | ${day}`);
-  renderTimetableSummary(route, day, rows, summary);
-
-  // 시간표 테이블
-  renderTimetableTable(rows, route);
-}
-
-function renderTimetableSummary(route, day, rows, summary) {
-  const color = ROUTE_COLORS[route] || '#1a56a0';
-  const seqNums = [...new Set(rows.map(r => r.s).filter(s => s && !s.startsWith('통학')))];
-  const totalTrips = rows.length;
-
-  // 첫/마지막 출발 계산
-  const times = rows.flatMap(r => [r.o, r.i]).filter(t => t && t !== '-' && /^\d{2}:\d{2}$/.test(t)).sort();
-  const first = times[0] || '-';
-  const last = times[times.length-1] || '-';
-
-  let html = `<div class="summary-card">
-    <div class="card-title" style="color:${color}">🚌 ${route} <small style="font-size:12px;color:#888;font-weight:400">(${day})</small></div>
-    <div class="stat-box"><div class="val">${summary ? summary['운행순번 수'] : seqNums.length}</div><div class="lbl">운행순번</div></div>
-    <div class="stat-box"><div class="val">${summary ? summary['총 운행횟수'] : totalTrips}</div><div class="lbl">총 운행횟수</div></div>
-    <div class="stat-box"><div class="val" style="font-size:14px">${summary ? summary['첫 출발'] : first}</div><div class="lbl">첫 출발</div></div>
-    <div class="stat-box"><div class="val" style="font-size:14px">${summary ? summary['마지막 출발'] : last}</div><div class="lbl">마지막 출발</div></div>
-  </div>`;
-  document.getElementById('tt-summary-card').innerHTML = html;
-}
-
-function renderTimetableTable(rows, route) {
-  let html = `<table>
-    <thead>
-      <tr>
-        <th>운행순번</th>
-        <th>회차</th>
-        <th>왕편 출발</th>
-        <th>복편 출발</th>
-        <th>행선지</th>
-        <th>비고</th>
-      </tr>
-    </thead>
-    <tbody>`;
-
-  rows.forEach(r => {
-    const seqDisplay = r.s && !isNaN(r.s)
-      ? `<span class="seq-badge">${r.s}</span>`
-      : `<span style="font-size:11px;color:#888">${r.s}</span>`;
-    html += `<tr>
-      <td>${seqDisplay}</td>
-      <td>${r.t}</td>
-      <td><b>${r.o || '-'}</b></td>
-      <td><b>${r.i || '-'}</b></td>
-      <td>${r.d || ''}</td>
-      <td class="note-cell">${r.n || ''}</td>
-    </tr>`;
+  const color = COLORS[route]||'#1a56a0';
+  const s = (busData.summary||[]).find(x=>x['조회키']===`${route} | ${day}`);
+  const times = rows.flatMap(r=>[r.o,r.i]).filter(t=>t&&t!=='-'&&/^\d{2}:\d{2}$/.test(t)).sort();
+  document.getElementById('tt-summary').innerHTML=`
+    <div class="summary-card">
+      <div class="card-title" style="color:${color}">🚌 ${route}
+        <small style="font-size:12px;color:#888;font-weight:400">(${day})</small></div>
+      <div class="stat-box"><div class="val">${s?s['운행순번 수']:'-'}</div><div class="lbl">운행순번</div></div>
+      <div class="stat-box"><div class="val">${s?s['총 운행횟수']:rows.length}</div><div class="lbl">총 운행횟수</div></div>
+      <div class="stat-box"><div class="val" style="font-size:14px">${s?s['첫 출발']:(times[0]||'-')}</div><div class="lbl">첫 출발</div></div>
+      <div class="stat-box"><div class="val" style="font-size:14px">${s?s['마지막 출발']:(times[times.length-1]||'-')}</div><div class="lbl">마지막 출발</div></div>
+    </div>`;
+  let html=`<table><thead><tr>
+    <th>순번</th><th>회차</th><th>왕편 출발</th><th>복편 출발</th><th>행선지</th><th>비고</th>
+  </tr></thead><tbody>`;
+  rows.forEach(r=>{
+    const seq=r.s&&!isNaN(r.s)?`<span class="seq-badge">${r.s}</span>`:`<span style="font-size:11px;color:#888">${r.s}</span>`;
+    html+=`<tr><td>${seq}</td><td>${r.t}</td><td><b>${r.o||'-'}</b></td><td><b>${r.i||'-'}</b></td><td>${r.d||''}</td><td class="note-cell">${r.n||''}</td></tr>`;
   });
-
-  html += '</tbody></table>';
-  document.getElementById('tt-table-wrap').innerHTML = html;
+  document.getElementById('tt-table').innerHTML=html+'</tbody></table>';
 }
 
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-//  노선요약 카드 목록
-// ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-function renderSummaryCards() {
-  if (!busData || !busData.summary) return;
-  const grid = document.getElementById('summary-grid');
-  let html = '';
-  busData.summary.forEach(s => {
-    if (!s['조회키'] || s['조회키'].startsWith('※')) return;
-    const route = s['노선그룹'] || '';
-    const color = ROUTE_COLORS[route] || '#1a56a0';
-    const key = s['조회키'];
-    html += `
-    <div class="scard" onclick="jumpToTimetable('${route}', '${s['요일구분']}')">
+// ━━━━ 노선요약 ━━━━
+function buildSummaryCards() {
+  if (!busData?.summary) return;
+  let html='';
+  busData.summary.forEach(s=>{
+    if (!s['조회키']||s['조회키'].startsWith('※')||!s['노선그룹']) return;
+    const c=COLORS[s['노선그룹']]||'#1a56a0';
+    html+=`<div class="scard" onclick="jumpToTT('${s['노선그룹']}','${s['요일구분']}')">
       <div class="scard-left">
-        <div class="route-name" style="color:${color}">${route}</div>
+        <div class="route-name" style="color:${c}">${s['노선그룹']}</div>
         <div class="day-type">${s['요일구분']} · 노선번호 ${s['노선번호']}</div>
       </div>
       <div class="scard-right">
@@ -624,25 +419,18 @@ function renderSummaryCards() {
       </div>
     </div>`;
   });
-  grid.innerHTML = html || '<div class="empty-msg">데이터 없음</div>';
+  document.getElementById('summary-grid').innerHTML=html||'<div class="empty-msg">데이터 없음</div>';
 }
 
-function jumpToTimetable(route, day) {
-  document.getElementById('tt-route').value = route;
-  // 요일 자동 선택
-  const daySelect = document.getElementById('tt-day');
-  for (let opt of daySelect.options) {
-    if (opt.value === day || day.includes(opt.value)) {
-      daySelect.value = opt.value;
-      break;
-    }
-  }
-  // 탭 전환
-  document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+function jumpToTT(route, day) {
+  document.getElementById('tt-route').value=route;
+  const ds=document.getElementById('tt-day');
+  for(let o of ds.options){if(o.value===day){ds.value=day;break;}}
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('timetable-panel').classList.add('active');
   document.querySelectorAll('.tab-btn')[1].classList.add('active');
-  onTimetableFilter();
+  onTTFilter();
   window.scrollTo(0,0);
 }
 </script>
