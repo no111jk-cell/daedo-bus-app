@@ -334,26 +334,60 @@ function showVariant(sachin, vname) {
   const content = routePaths[sachin]?.[vname];
   if (!content) return;
 
-  const color = COLORS[sachin] || '#1a56a0';
+  const baseColor = COLORS[sachin] || '#1a56a0';
+  const upColor   = baseColor;               // 상행: 원색
+  const downColor = shadeColor(baseColor, -30); // 하행: 어둡게
+
   overlays[key] = { polylines:[], markers:[], customs:[] };
 
-  // 폴리라인
-  const line = new kakao.maps.Polyline({
-    path: content.path.map(c=>new kakao.maps.LatLng(c[0],c[1])),
-    strokeWeight:5, strokeColor:color, strokeOpacity:0.82,
-    strokeStyle:'solid', map:kakaoMap
-  });
-  overlays[key].polylines.push(line);
+  // 정류장의 방향 전환 지점을 기준으로 path를 상행/하행 구간으로 분리
+  // stops와 path는 개별 계산이라 인덱스 직접 매핑이 어려우므로,
+  // stops 배열의 방향 전환 시점 좌표를 기준으로 path를 나눔
+  const dirChangeIdx = [];
+  for (let i=1; i<content.stops.length; i++) {
+    if (content.stops[i].dir !== content.stops[i-1].dir) dirChangeIdx.push(i);
+  }
+
+  if (dirChangeIdx.length === 0) {
+    // 방향 구분 없음(순환노선) → 단일 색상
+    const line = new kakao.maps.Polyline({
+      path: content.path.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+      strokeWeight:5, strokeColor:upColor, strokeOpacity:0.82,
+      strokeStyle:'solid', map:kakaoMap
+    });
+    overlays[key].polylines.push(line);
+  } else {
+    // 전환 지점의 좌표를 기준으로 path 분할
+    const splitStop = content.stops[dirChangeIdx[0]];
+    let splitIdx = content.path.findIndex(p =>
+      Math.abs(p[0]-splitStop.lat)<0.0015 && Math.abs(p[1]-splitStop.lng)<0.0015);
+    if (splitIdx <= 0) splitIdx = Math.floor(content.path.length/2);
+
+    const upPath   = content.path.slice(0, splitIdx+1);
+    const downPath = content.path.slice(splitIdx);
+
+    const line1 = new kakao.maps.Polyline({
+      path: upPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+      strokeWeight:5, strokeColor:upColor, strokeOpacity:0.85,
+      strokeStyle:'solid', map:kakaoMap
+    });
+    const line2 = new kakao.maps.Polyline({
+      path: downPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+      strokeWeight:5, strokeColor:downColor, strokeOpacity:0.85,
+      strokeStyle:'shortdash', map:kakaoMap
+    });
+    overlays[key].polylines.push(line1, line2);
+  }
 
   // 정류장 마커
   content.stops.forEach((s,i) => {
     if (!s.lat||!s.lng) return;
     const pos = new kakao.maps.LatLng(s.lat, s.lng);
     const isTerminal = (i===0||i===content.stops.length-1);
+    const dotColor = s.dir === '하행' ? downColor : upColor;
 
-    // 인포윈도우 내용: 정류장명 + 경유 노선 + 운행시간
     const relatedRoutes = (stopIndex[s.name]||[])
-      .map(r=>r.sachin).filter((v,i,a)=>a.indexOf(v)===i); // 중복제거
+      .map(r=>r.sachin).filter((v,i,a)=>a.indexOf(v)===i);
 
     let routeHtml = relatedRoutes.map(rs => {
       const times = routeTimes[rs] || [];
@@ -364,8 +398,10 @@ function showVariant(sachin, vname) {
       </div>`;
     }).join('');
 
+    const dirBadge = s.dir ? `<span style="font-size:10px;background:${dotColor};color:#fff;border-radius:3px;padding:1px 5px;margin-left:5px">${s.dir}</span>` : '';
+
     const iwContent = `<div class="stop-iw">
-      <div class="iw-name">${s.name}</div>
+      <div class="iw-name">${s.name}${dirBadge}</div>
       ${routeHtml}
       <button class="iw-go-btn" onclick="goToTimetable('${relatedRoutes[0]||''}')">📋 시간표 보기</button>
     </div>`;
@@ -379,17 +415,19 @@ function showVariant(sachin, vname) {
       });
       overlays[key].markers.push(marker);
     } else {
+      // 시각적 점 (확대: 7px → 11px)
       const dot = new kakao.maps.CustomOverlay({
         position:pos, zIndex:3, xAnchor:0.5, yAnchor:0.5,
-        content:`<div style="width:7px;height:7px;border-radius:50%;background:${color};border:1.5px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.4);cursor:pointer"></div>`
+        content:`<div style="width:11px;height:11px;border-radius:50%;background:${dotColor};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.45);cursor:pointer"></div>`
       });
       dot.setMap(kakaoMap);
+      // 클릭 히트영역 확대: 14px → 26px 투명 마커
       const marker = new kakao.maps.Marker({
         position:pos, map:kakaoMap,
         image:new kakao.maps.MarkerImage(
           'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
-          new kakao.maps.Size(14,14),
-          { offset: new kakao.maps.Point(7,7) })
+          new kakao.maps.Size(26,26),
+          { offset: new kakao.maps.Point(13,13) })
       });
       kakao.maps.event.addListener(marker,'click',()=>{
         if(iwOpen) iwOpen.close(); iw.open(kakaoMap,marker); iwOpen=iw;
@@ -399,6 +437,18 @@ function showVariant(sachin, vname) {
     }
   });
   fitBoundsAll();
+}
+
+// 색상 밝기 조정 (양수: 밝게, 음수: 어둡게)
+function shadeColor(hex, percent) {
+  hex = hex.replace('#','');
+  let r = parseInt(hex.substring(0,2),16);
+  let g = parseInt(hex.substring(2,4),16);
+  let b = parseInt(hex.substring(4,6),16);
+  r = Math.max(0,Math.min(255, Math.round(r*(100+percent)/100)));
+  g = Math.max(0,Math.min(255, Math.round(g*(100+percent)/100)));
+  b = Math.max(0,Math.min(255, Math.round(b*(100+percent)/100)));
+  return '#' + [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
 }
 
 function hideVariant(sachin, vname) {
@@ -612,16 +662,6 @@ function jumpToTT(route,day) {
   document.getElementById('timetable-panel').classList.add('active');
   document.querySelectorAll('.tab-btn')[1].classList.add('active');
   onTTFilter(); window.scrollTo(0,0);
-}
-function goToTimetable(sachin) {
-  const times=routeTimes[sachin]||[];
-  document.getElementById('tt-route').value=sachin;
-  if(times.length){
-    const ds=document.getElementById('tt-day');
-    for(let o of ds.options){if(o.value===times[0].day){ds.value=times[0].day;break;}}
-  }
-  switchTab('timetable', document.querySelectorAll('.tab-btn')[1]);
-  onTTFilter();
 }
 </script>
 </body>
