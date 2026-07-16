@@ -165,9 +165,39 @@
     .scard-right { text-align: right; }
     .scard-right .times { font-size: 13px; font-weight: 600; }
     .scard-right .counts { font-size: 11px; color: #666; margin-top: 2px; }
+    /* 우클릭 컨텍스트 메뉴 */
+    #ctx-menu {
+      display: none; position: fixed; z-index: 9999;
+      background: #fff; border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.22);
+      padding: 6px 0; min-width: 180px; font-size: 13px;
+    }
+    .ctx-item {
+      padding: 8px 16px; cursor: pointer; display: flex;
+      align-items: center; gap: 8px; color: #222;
+    }
+    .ctx-item:hover { background: #e8eef8; color: #1a56a0; }
+    .ctx-divider { border: none; border-top: 1px solid #eee; margin: 4px 0; }
+    .ctx-header {
+      padding: 6px 16px 4px; font-size: 11px;
+      color: #888; user-select: none;
+    }
+    #ctx-coord { font-size: 11px; color: #555; padding: 4px 16px 6px; user-select: all; }
   </style>
 </head>
 <body>
+
+<!-- 우클릭 컨텍스트 메뉴 -->
+<div id="ctx-menu">
+  <div class="ctx-header">📍 선택한 위치</div>
+  <div id="ctx-coord">-</div>
+  <hr class="ctx-divider">
+  <div class="ctx-item" onclick="ctxCopyCoord()">📋 좌표 복사</div>
+  <div class="ctx-item" onclick="ctxCopyAddress()">🏠 주소 복사</div>
+  <div class="ctx-item" onclick="ctxOpenKakao()">🗺 카카오맵에서 열기</div>
+  <hr class="ctx-divider">
+  <div class="ctx-item" onclick="ctxFindNearStop()">🚌 주변 정류장 찾기</div>
+</div>
 
 <header>
   <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2">
@@ -264,7 +294,17 @@ window.onload = async function() {
       center: new kakao.maps.LatLng(37.3422, 127.9201), level: 7
     });
     kakaoMap.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
-    kakao.maps.event.addListener(kakaoMap,'click',()=>{ if(iwOpen) iwOpen.close(); });
+    kakao.maps.event.addListener(kakaoMap,'click',()=>{
+      if(iwOpen) iwOpen.close();
+      hideContextMenu();
+    });
+
+    // 우클릭 컨텍스트 메뉴
+    kakao.maps.event.addListener(kakaoMap, 'rightclick', function(e) {
+      const lat = e.latLng.getLat();
+      const lng = e.latLng.getLng();
+      showContextMenu(lat, lng, e.point.x, e.point.y);
+    });
   });
 
   const [bd, rp, rt, si] = await Promise.all([
@@ -570,6 +610,121 @@ function goToTimetable(sachin) {
   document.querySelectorAll('.tab-btn')[1].classList.add('active');
   onTTFilter();
   window.scrollTo(0,0);
+}
+
+// ── 우클릭 컨텍스트 메뉴 ──
+let ctxLat = 0, ctxLng = 0, ctxAddress = '';
+
+function showContextMenu(lat, lng, px, py) {
+  ctxLat = lat; ctxLng = lng; ctxAddress = '';
+  const menu = document.getElementById('ctx-menu');
+  document.getElementById('ctx-coord').textContent =
+    `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+
+  // 화면 경계 처리
+  const mw=180, mh=200;
+  const x = (px + mw > window.innerWidth)  ? px - mw : px;
+  const y = (py + mh > window.innerHeight) ? py - mh : py;
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
+  menu.style.display = 'block';
+
+  // 주소 역지오코딩 (카카오 서비스)
+  const geocoder = new kakao.maps.services.Geocoder();
+  geocoder.coord2Address(lng, lat, function(result, status) {
+    if (status === kakao.maps.services.Status.OK) {
+      const addr = result[0];
+      ctxAddress = addr.road_address
+        ? addr.road_address.address_name
+        : addr.address.address_name;
+      document.getElementById('ctx-coord').textContent =
+        `${ctxAddress}\n${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+    }
+  });
+}
+
+function hideContextMenu() {
+  document.getElementById('ctx-menu').style.display = 'none';
+}
+
+function ctxCopyCoord() {
+  navigator.clipboard.writeText(`${ctxLat.toFixed(6)}, ${ctxLng.toFixed(6)}`);
+  showToast('좌표가 복사됐습니다.');
+  hideContextMenu();
+}
+
+function ctxCopyAddress() {
+  if (!ctxAddress) { showToast('주소 로딩 중…'); return; }
+  navigator.clipboard.writeText(ctxAddress);
+  showToast('주소가 복사됐습니다.');
+  hideContextMenu();
+}
+
+function ctxOpenKakao() {
+  window.open(`https://map.kakao.com/link/map/${ctxLat.toFixed(6)},${ctxLng.toFixed(6)}`, '_blank');
+  hideContextMenu();
+}
+
+function ctxFindNearStop() {
+  hideContextMenu();
+  if (!stopIndex) return;
+  // 반경 300m 이내 정류장 탐색
+  const found = [];
+  const seen  = new Set();
+  for (const [name, entries] of Object.entries(stopIndex)) {
+    if (seen.has(name)) continue;
+    const e = entries.find(x=>x.lat&&x.lng);
+    if (!e) continue;
+    const d = haversineSimple(ctxLat, ctxLng, e.lat, e.lng);
+    if (d <= 300) { found.push({ name, d, entries }); seen.add(name); }
+  }
+  found.sort((a,b) => a.d - b.d);
+
+  if (!found.length) { showToast('300m 이내 정류장 없음'); return; }
+
+  let html = `<div style="padding:10px 14px;min-width:200px;max-width:280px">
+    <div style="font-weight:700;color:#1a56a0;margin-bottom:8px;font-size:13px">
+      🚌 주변 정류장 (${found.length}개)</div>`;
+  found.slice(0,8).forEach(f => {
+    const routes = [...new Set(f.entries.map(x=>x.sachin))];
+    const dots   = routes.map(r=>`<span style="color:${COLORS[r]||'#999'}">●</span>`).join('');
+    html += `<div style="margin-bottom:6px;font-size:12px">
+      <b>${f.name}</b> <span style="color:#888;font-size:10px">${Math.round(f.d)}m</span><br>
+      <span style="font-size:11px">${dots} ${routes.join(', ')}</span>
+    </div>`;
+  });
+  html += '</div>';
+
+  const pos = new kakao.maps.LatLng(ctxLat, ctxLng);
+  const iw  = new kakao.maps.InfoWindow({ content: html, removable: true });
+  if (iwOpen) iwOpen.close();
+  iw.open(kakaoMap, new kakao.maps.Marker({ position: pos, map: kakaoMap }));
+  iwOpen = iw;
+}
+
+function haversineSimple(lat1,lng1,lat2,lng2){
+  const R=6371000;
+  const p1=lat1*Math.PI/180, p2=lat2*Math.PI/180;
+  const dp=(lat2-lat1)*Math.PI/180, dl=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+
+// 토스트 알림
+function showToast(msg) {
+  let t = document.getElementById('toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toast';
+    t.style.cssText = `position:fixed;bottom:30px;left:50%;transform:translateX(-50%);
+      background:rgba(0,0,0,0.75);color:#fff;padding:8px 18px;border-radius:20px;
+      font-size:13px;z-index:99999;transition:opacity 0.3s;pointer-events:none`;
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 2000);
 }
 
 // ── 사이드바 접기 ──
