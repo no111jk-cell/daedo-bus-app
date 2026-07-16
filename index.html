@@ -246,6 +246,16 @@ let busData=null, routePaths=null, routeTimes=null, stopIndex=null;
 let kakaoMap=null;
 let overlays={};
 let iwOpen=null;
+// 정류장 클릭 레지스트리 (CustomOverlay onclick용)
+let __stopRegistry=[];
+function __stopClick(id) {
+  const entry = __stopRegistry[id];
+  if (!entry) return;
+  if (iwOpen) iwOpen.close();
+  entry.iw.setPosition(entry.pos);
+  entry.iw.open(kakaoMap);
+  iwOpen = entry.iw;
+}
 
 // ── 초기화 ──
 window.onload = async function() {
@@ -415,25 +425,17 @@ function showVariant(sachin, vname) {
       });
       overlays[key].markers.push(marker);
     } else {
-      // 시각적 점 (확대: 7px → 11px)
+      // 점 자체가 클릭 요소: 26px 히트영역 안에 11px 점
+      const stopId = __stopRegistry.length;
+      __stopRegistry.push({ iw, pos });
       const dot = new kakao.maps.CustomOverlay({
-        position:pos, zIndex:3, xAnchor:0.5, yAnchor:0.5,
-        content:`<div style="width:11px;height:11px;border-radius:50%;background:${dotColor};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.45);cursor:pointer"></div>`
+        position:pos, zIndex:4, xAnchor:0.5, yAnchor:0.5,
+        content:`<div onclick="__stopClick(${stopId})" style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+          <div style="width:11px;height:11px;border-radius:50%;background:${dotColor};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.45)"></div>
+        </div>`
       });
       dot.setMap(kakaoMap);
-      // 클릭 히트영역 확대: 14px → 26px 투명 마커
-      const marker = new kakao.maps.Marker({
-        position:pos, map:kakaoMap,
-        image:new kakao.maps.MarkerImage(
-          'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7',
-          new kakao.maps.Size(26,26),
-          { offset: new kakao.maps.Point(13,13) })
-      });
-      kakao.maps.event.addListener(marker,'click',()=>{
-        if(iwOpen) iwOpen.close(); iw.open(kakaoMap,marker); iwOpen=iw;
-      });
       overlays[key].customs.push(dot);
-      overlays[key].markers.push(marker);
     }
   });
   fitBoundsAll();
