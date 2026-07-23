@@ -326,6 +326,23 @@ window.onload = async function() {
   ]);
   busData=bd; routePaths=rp; routeTimes=rt; stopIndex=si;
 
+  // [전수 검증] 모든 노선 변형: 그릴 수 있는 선이 반드시 존재하는지 코드 차원 확인
+  (function auditAllRoutes(){
+    let ok=0, fb=0, fail=0;
+    for (const [sa, vs] of Object.entries(routePaths)) {
+      for (const [vn, c] of Object.entries(vs)) {
+        const segs = (Array.isArray(c.segs)&&c.segs.length) ? c.segs : [c.path];
+        const drawable = segs.some(s => validCoords(s).length >= 2);
+        const stopsOk = (c.stops||[]).filter(s=>s.lat&&s.lng).length >= 2;
+        if (drawable) ok++;
+        else if (stopsOk) { fb++; console.warn(`[전수검증] ${vn}: 경로 데이터 이상 → 정류장 직결 폴백 예정`); }
+        else { fail++; console.error(`[전수검증] ${vn}: 경로·정류장 모두 불가 — 데이터 파일 확인 필요`); }
+      }
+    }
+    console.log(`[전수검증] 정상 ${ok} / 폴백 ${fb} / 불가 ${fail}`);
+    if (fail>0) alert(`노선 데이터 오류 ${fail}건 — route_paths.json 파일을 다시 업로드해주세요. (F12 콘솔 참조)`);
+  })();
+
   buildCheckList();
   buildTTSelect();
   buildSummaryCards();
@@ -389,6 +406,14 @@ function onCheck(chk) {
 }
 
 // ── 노선 표시/숨김 ──
+// [무결성 보장] 좌표 배열 유효성 검사: 숫자쌍만 통과
+function validCoords(arr) {
+  if (!Array.isArray(arr)) return [];
+  return arr.filter(c => Array.isArray(c) && c.length>=2
+    && typeof c[0]==='number' && typeof c[1]==='number'
+    && c[0]>30 && c[0]<40 && c[1]>124 && c[1]<132);
+}
+
 function showVariant(sachin, vname) {
   const key = sachin+'||'+vname;
   if (overlays[key]) return;
@@ -401,56 +426,78 @@ function showVariant(sachin, vname) {
 
   overlays[key] = { polylines:[], markers:[], customs:[] };
 
-  const segList = content.segs || [content.path];
+  // [1단계] 경로(DTG/segs/path) 그리기 시도 - 어떤 예외도 정류장 렌더를 막지 못하게 격리
+  try {
+    const rawSegs = (Array.isArray(content.segs) && content.segs.length)
+      ? content.segs : [content.path];
+    const segList = rawSegs.map(validCoords).filter(s => s.length >= 2);
 
-  if (segList.length > 1) {
-    // 다중 세그먼트(왕편·복편 별도 궤적): 첫 세그 원색 실선, 이후 어두운 점선
-    segList.forEach((seg, si) => {
-      const line = new kakao.maps.Polyline({
-        path: seg.map(c=>new kakao.maps.LatLng(c[0],c[1])),
-        strokeWeight:5,
-        strokeColor: si===0 ? upColor : downColor,
-        strokeOpacity:0.85,
-        strokeStyle: si===0 ? 'solid' : 'shortdash',
-        map:kakaoMap
+    if (segList.length > 1) {
+      segList.forEach((seg, si) => {
+        const line = new kakao.maps.Polyline({
+          path: seg.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+          strokeWeight:5,
+          strokeColor: si===0 ? upColor : downColor,
+          strokeOpacity:0.85,
+          strokeStyle: si===0 ? 'solid' : 'shortdash',
+          map:kakaoMap
+        });
+        overlays[key].polylines.push(line);
       });
-      overlays[key].polylines.push(line);
-    });
-  } else {
-    const pathArr = segList[0];
-    // 정류장의 방향 전환 지점을 기준으로 path를 상행/하행 구간으로 분리
-    const dirChangeIdx = [];
-    for (let i=1; i<content.stops.length; i++) {
-      if (content.stops[i].dir !== content.stops[i-1].dir) dirChangeIdx.push(i);
+    } else if (segList.length === 1) {
+      const pathArr = segList[0];
+      const dirChangeIdx = [];
+      for (let i=1; i<content.stops.length; i++) {
+        if (content.stops[i].dir !== content.stops[i-1].dir) dirChangeIdx.push(i);
+      }
+      if (dirChangeIdx.length === 0) {
+        const line = new kakao.maps.Polyline({
+          path: pathArr.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+          strokeWeight:5, strokeColor:upColor, strokeOpacity:0.82,
+          strokeStyle:'solid', map:kakaoMap
+        });
+        overlays[key].polylines.push(line);
+      } else {
+        const splitStop = content.stops[dirChangeIdx[0]];
+        let splitIdx = pathArr.findIndex(p =>
+          Math.abs(p[0]-splitStop.lat)<0.0015 && Math.abs(p[1]-splitStop.lng)<0.0015);
+        if (splitIdx <= 0) splitIdx = Math.floor(pathArr.length/2);
+        const upPath   = pathArr.slice(0, splitIdx+1);
+        const downPath = pathArr.slice(splitIdx);
+        const line1 = new kakao.maps.Polyline({
+          path: upPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+          strokeWeight:5, strokeColor:upColor, strokeOpacity:0.85,
+          strokeStyle:'solid', map:kakaoMap
+        });
+        const line2 = new kakao.maps.Polyline({
+          path: downPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+          strokeWeight:5, strokeColor:downColor, strokeOpacity:0.85,
+          strokeStyle:'shortdash', map:kakaoMap
+        });
+        overlays[key].polylines.push(line1, line2);
+      }
     }
+  } catch (e) {
+    console.error(`[경로 렌더 실패] ${vname}:`, e);
+  }
 
-    if (dirChangeIdx.length === 0) {
-      const line = new kakao.maps.Polyline({
-        path: pathArr.map(c=>new kakao.maps.LatLng(c[0],c[1])),
-        strokeWeight:5, strokeColor:upColor, strokeOpacity:0.82,
-        strokeStyle:'solid', map:kakaoMap
-      });
-      overlays[key].polylines.push(line);
-    } else {
-      const splitStop = content.stops[dirChangeIdx[0]];
-      let splitIdx = pathArr.findIndex(p =>
-        Math.abs(p[0]-splitStop.lat)<0.0015 && Math.abs(p[1]-splitStop.lng)<0.0015);
-      if (splitIdx <= 0) splitIdx = Math.floor(pathArr.length/2);
-
-      const upPath   = pathArr.slice(0, splitIdx+1);
-      const downPath = pathArr.slice(splitIdx);
-
-      const line1 = new kakao.maps.Polyline({
-        path: upPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),
-        strokeWeight:5, strokeColor:upColor, strokeOpacity:0.85,
-        strokeStyle:'solid', map:kakaoMap
-      });
-      const line2 = new kakao.maps.Polyline({
-        path: downPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),
-        strokeWeight:5, strokeColor:downColor, strokeOpacity:0.85,
-        strokeStyle:'shortdash', map:kakaoMap
-      });
-      overlays[key].polylines.push(line1, line2);
+  // [2단계·최후 보장] 경로 폴리라인이 하나도 안 그려졌으면
+  // 마스터DB 정류장 순서를 직선으로 강제 연결 - 선 없는 노선은 존재할 수 없음
+  if (overlays[key].polylines.length === 0) {
+    try {
+      const stopLine = content.stops
+        .filter(s => s.lat && s.lng)
+        .map(s => new kakao.maps.LatLng(s.lat, s.lng));
+      if (stopLine.length >= 2) {
+        const fallback = new kakao.maps.Polyline({
+          path: stopLine, strokeWeight:5, strokeColor:upColor,
+          strokeOpacity:0.8, strokeStyle:'solid', map:kakaoMap
+        });
+        overlays[key].polylines.push(fallback);
+        console.warn(`[폴백] ${vname}: 경로 데이터 이상 → 정류장 직결선으로 표시`);
+      }
+    } catch (e) {
+      console.error(`[폴백 실패] ${vname}:`, e);
     }
   }
 
