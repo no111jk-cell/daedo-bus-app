@@ -1,0 +1,912 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>대도여객 노선 조회</title>
+  <script type="text/javascript" src="//dapi.kakao.com/v2/maps/sdk.js?appkey=f1393db0848c0e62fb05cb92d3fabe28&libraries=services"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Malgun Gothic', sans-serif; background: #f0f4f8; color: #222; }
+
+    header {
+      background: #1a56a0; color: #fff;
+      padding: 12px 16px; display: flex; align-items: center; gap: 10px;
+      box-shadow: 0 2px 6px rgba(0,0,0,0.3); z-index: 100; position: relative;
+    }
+    header h1 { font-size: 17px; font-weight: 700; }
+    header span { font-size: 11px; opacity: 0.75; margin-left: auto; }
+
+    .tab-bar { display: flex; background: #fff; border-bottom: 2px solid #e0e0e0; z-index: 100; position: relative; }
+    .tab-btn {
+      flex: 1; padding: 11px 0; font-size: 14px; font-weight: 600;
+      border: none; background: none; cursor: pointer; color: #888;
+      border-bottom: 3px solid transparent;
+    }
+    .tab-btn.active { color: #1a56a0; border-bottom: 3px solid #1a56a0; }
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    /* ── 지도 ── */
+    #map-panel { position: relative; }
+    #map { width: 100%; height: calc(100vh - 104px); }
+
+    #map-controls {
+      position: absolute; top: 10px; left: 10px; z-index: 10;
+      background: rgba(255,255,255,0.97); border-radius: 8px;
+      padding: 12px 14px; box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+      width: 230px; transition: width 0.2s, padding 0.2s;
+    }
+    #map-controls.collapsed {
+      width: 40px; padding: 8px; overflow: hidden;
+    }
+    #map-controls.collapsed > *:not(.collapse-toggle) { display: none; }
+    .collapse-toggle {
+      position: absolute; top: 6px; right: 6px;
+      width: 24px; height: 24px; border-radius: 5px;
+      background: #1a56a0; color: #fff; border: none;
+      cursor: pointer; font-size: 13px; display: flex;
+      align-items: center; justify-content: center; z-index: 11;
+    }
+    #map-controls.collapsed .collapse-toggle {
+      position: static; margin: 0 auto;
+    }
+    #map-controls .ctrl-title { font-size: 12px; font-weight: 700; color: #1a56a0; display: block; margin-bottom: 8px; }
+
+    /* 정류장 검색 */
+    #stop-search-wrap { position: relative; margin-bottom: 8px; }
+    #stop-search {
+      width: 100%; padding: 7px 30px 7px 8px;
+      font-size: 12px; border: 1px solid #ccc; border-radius: 5px;
+    }
+    #stop-search:focus { outline: none; border-color: #1a56a0; }
+    #stop-search-clear {
+      position: absolute; right: 7px; top: 50%; transform: translateY(-50%);
+      cursor: pointer; color: #aaa; font-size: 14px; display: none;
+    }
+    #stop-search-results {
+      display: none; background: #fff; border: 1px solid #ddd; border-radius: 5px;
+      max-height: 160px; overflow-y: auto; margin-top: 2px;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    }
+    .stop-result-item {
+      padding: 7px 10px; font-size: 12px; cursor: pointer; border-bottom: 1px solid #f0f0f0;
+    }
+    .stop-result-item:hover { background: #e8eef8; }
+    .stop-result-name { font-weight: 700; }
+    .stop-result-routes { font-size: 10px; color: #888; margin-top: 1px; }
+
+    .ctrl-divider { border: none; border-top: 1px solid #eee; margin: 8px 0; }
+
+    /* 노선 체크리스트 */
+    .route-check-list { max-height: 50vh; overflow-y: auto; }
+    .route-row {
+      display: flex; align-items: center; gap: 7px;
+      padding: 4px 2px; cursor: pointer;
+    }
+    .route-row input { width: 14px; height: 14px; cursor: pointer; accent-color: #1a56a0; }
+    .route-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    .route-label { font-size: 12px; flex: 1; cursor: pointer; }
+
+    /* 복수 변형 그룹 */
+    .group-header {
+      display: flex; align-items: center; gap: 7px;
+      padding: 4px 2px; cursor: pointer;
+    }
+    .group-header .route-label { font-weight: 700; }
+    .group-arrow { font-size: 10px; color: #888; margin-left: auto; }
+    .variant-list { padding-left: 20px; display: none; }
+    .variant-list.open { display: block; }
+    .variant-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 3px 2px; cursor: pointer;
+    }
+    .variant-row input { width: 13px; height: 13px; cursor: pointer; }
+    .variant-label { font-size: 11px; color: #555; cursor: pointer; }
+
+    .map-btn-row { display: flex; gap: 5px; margin-top: 8px; }
+    .map-btn {
+      flex: 1; padding: 5px 0; font-size: 11px;
+      border: 1px solid #ccc; border-radius: 4px; background: #f5f5f5; cursor: pointer;
+    }
+    .map-btn:hover { background: #e8eef8; border-color: #1a56a0; color: #1a56a0; }
+
+    /* 정류장 인포윈도우 스타일 */
+    .stop-iw { padding: 10px 14px; font-size: 12px; min-width: 180px; max-width: 260px; }
+    .stop-iw .iw-name { font-size: 14px; font-weight: 700; color: #1a56a0; margin-bottom: 6px; }
+    .stop-iw .iw-route { margin: 3px 0; }
+    .stop-iw .iw-route-name { font-weight: 700; }
+    .stop-iw .iw-times { font-size: 11px; color: #555; margin-top: 1px; }
+    .stop-iw .iw-go-btn {
+      display: inline-block; margin-top: 8px; padding: 5px 12px;
+      background: #1a56a0; color: #fff; border-radius: 4px;
+      font-size: 11px; cursor: pointer; border: none;
+    }
+
+    /* ── 시간표 ── */
+    #timetable-panel { padding: 14px; }
+    .filter-row { display: flex; gap: 8px; margin-bottom: 14px; flex-wrap: wrap; }
+    .filter-row select {
+      flex: 1; min-width: 140px; padding: 9px 10px;
+      font-size: 14px; border: 1px solid #ccc; border-radius: 6px; background: #fff;
+    }
+    .summary-card {
+      background: #fff; border-radius: 10px; padding: 14px 16px;
+      margin-bottom: 14px; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      display: flex; flex-wrap: wrap; gap: 10px;
+    }
+    .summary-card .card-title { width: 100%; font-size: 15px; font-weight: 700; margin-bottom: 4px; }
+    .stat-box {
+      background: #f0f4f8; border-radius: 6px; padding: 8px 14px;
+      text-align: center; flex: 1; min-width: 80px;
+    }
+    .stat-box .val { font-size: 18px; font-weight: 700; color: #1a56a0; }
+    .stat-box .lbl { font-size: 11px; color: #666; margin-top: 2px; }
+    .timetable-wrap { background: #fff; border-radius: 10px; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.1); }
+    .timetable-wrap table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .timetable-wrap thead th { background: #1a56a0; color: #fff; padding: 10px 8px; text-align: center; font-size: 12px; }
+    .timetable-wrap tbody tr:nth-child(even) { background: #f7faff; }
+    .timetable-wrap tbody td { padding: 8px; text-align: center; border-bottom: 1px solid #eee; }
+    .timetable-wrap tbody td.note-cell { font-size: 11px; color: #888; text-align: left; }
+    .seq-badge { display: inline-block; background: #1a56a0; color: #fff; border-radius: 12px; padding: 2px 8px; font-size: 11px; font-weight: 700; }
+    .empty-msg { text-align: center; padding: 40px; color: #aaa; font-size: 14px; }
+
+    /* ── 노선요약 ── */
+    #summary-panel { padding: 14px; }
+    .scard {
+      background: #fff; border-radius: 10px; padding: 14px 16px;
+      margin-bottom: 10px; box-shadow: 0 1px 4px rgba(0,0,0,0.1);
+      display: flex; justify-content: space-between; align-items: center;
+      cursor: pointer; transition: box-shadow 0.15s;
+    }
+    .scard:hover { box-shadow: 0 3px 12px rgba(26,86,160,0.2); }
+    .scard-left .route-name { font-size: 14px; font-weight: 700; }
+    .scard-left .day-type { font-size: 11px; color: #888; margin-top: 2px; }
+    .scard-right { text-align: right; }
+    .scard-right .times { font-size: 13px; font-weight: 600; }
+    .scard-right .counts { font-size: 11px; color: #666; margin-top: 2px; }
+    /* 우클릭 컨텍스트 메뉴 */
+    #ctx-menu {
+      display: none; position: fixed; z-index: 9999;
+      background: #fff; border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.22);
+      padding: 6px 0; min-width: 180px; font-size: 13px;
+    }
+    .ctx-item {
+      padding: 8px 16px; cursor: pointer; display: flex;
+      align-items: center; gap: 8px; color: #222;
+    }
+    .ctx-item:hover { background: #e8eef8; color: #1a56a0; }
+    .ctx-divider { border: none; border-top: 1px solid #eee; margin: 4px 0; }
+    .ctx-header {
+      padding: 6px 16px 4px; font-size: 11px;
+      color: #888; user-select: none;
+    }
+    #ctx-coord { font-size: 11px; color: #555; padding: 4px 16px 6px; user-select: all; }
+  </style>
+</head>
+<body>
+
+<!-- 우클릭 컨텍스트 메뉴 -->
+<div id="ctx-menu">
+  <div class="ctx-header">📍 선택한 위치</div>
+  <div id="ctx-address" style="padding:3px 16px 2px;font-size:12px;font-weight:700;color:#222">주소 조회 중…</div>
+  <div id="ctx-coord-wrap" style="display:none">
+    <div id="ctx-coord" style="padding:1px 16px 5px;font-size:10px;color:#aaa;user-select:all">-</div>
+  </div>
+  <div class="ctx-item" style="font-size:11px;color:#888;padding:3px 16px" onclick="toggleCtxCoord()">▸ 좌표 보기/숨기기</div>
+  <hr class="ctx-divider">
+  <div class="ctx-item" onclick="ctxCopyAddress()">📋 주소 복사</div>
+  <div class="ctx-item" onclick="ctxCopyCoord()">📌 좌표 복사</div>
+  <div class="ctx-item" onclick="ctxOpenKakao()">🗺 카카오맵에서 열기</div>
+  <hr class="ctx-divider">
+  <div class="ctx-item" onclick="ctxFindNearStop()">🚌 주변 정류장 찾기</div>
+</div>
+
+<header>
+  <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.2">
+    <path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/>
+    <polyline points="9 22 9 12 15 12 15 22"/>
+  </svg>
+  <h1>대도여객 노선 조회</h1>
+  <span id="data-note">로딩 중…</span>
+</header>
+
+<div class="tab-bar">
+  <button class="tab-btn active" onclick="switchTab('map',this)">🗺 지도</button>
+  <button class="tab-btn" onclick="switchTab('timetable',this)">🕐 시간표</button>
+  <button class="tab-btn" onclick="switchTab('summary',this)">📋 노선요약</button>
+</div>
+
+<!-- 지도 -->
+<div id="map-panel" class="panel active">
+  <div id="map-controls">
+    <button class="collapse-toggle" onclick="toggleSidebar()" id="collapse-btn">◀</button>
+    <span class="ctrl-title">🔍 검색 (정류장 · 주소)</span>
+    <div id="stop-search-wrap">
+      <input type="text" id="stop-search" placeholder="정류장명 또는 주소 입력…" oninput="onStopSearch(this.value)" autocomplete="off">
+      <span id="stop-search-clear" onclick="clearStopSearch()">✕</span>
+      <div id="stop-search-results"></div>
+    </div>
+
+    <hr class="ctrl-divider">
+    <span class="ctrl-title">🚌 노선 선택</span>
+    <div class="route-check-list" id="route-check-list"></div>
+    <div class="map-btn-row">
+      <button class="map-btn" onclick="selectAll()">전체 선택</button>
+      <button class="map-btn" onclick="clearAll()">전체 해제</button>
+    </div>
+  </div>
+  <div id="map"></div>
+</div>
+
+<!-- 시간표 -->
+<div id="timetable-panel" class="panel">
+  <div class="filter-row">
+    <select id="tt-route" onchange="onTTFilter()"><option value="">── 노선 선택 ──</option></select>
+    <select id="tt-day" onchange="onTTFilter()">
+      <option value="">── 요일 선택 ──</option>
+      <option value="평일(학기중)">평일(학기중)</option>
+      <option value="휴일/방학">휴일/방학</option>
+      <option value="매일(평일=휴일)">매일(평일=휴일)</option>
+      <option value="매일(공통)">매일(공통)</option>
+    </select>
+  </div>
+  <div id="tt-summary"></div>
+  <div id="tt-table" class="timetable-wrap">
+    <div class="empty-msg">노선과 요일을 선택하면 시간표가 표시됩니다.</div>
+  </div>
+</div>
+
+<!-- 노선요약 -->
+<div id="summary-panel" class="panel">
+  <div id="summary-grid"><div class="empty-msg">로딩 중…</div></div>
+</div>
+
+<script>
+const COLORS = {
+  '시내순환3번':'#e53935','시내순환3-1번':'#ef6c00',
+  '시내순환4번':'#c62828','시내순환4-1번':'#e91e63',
+  '혁신순환16번':'#1a56a0','혁신순환16-1번':'#1565c0','혁신지선13번':'#0d47a1',
+  '귀래31·34 매지리':'#2e7d32',
+  '신림(21~25번대)':'#f57c00',
+  '연대30번':'#6a1b9a','한라대90번':'#7b1fa2',
+  '100-2번 기업도시':'#00838f',
+  '성문사81번':'#4e342e','82번':'#795548',
+  '서곡32번':'#00695c','50번(한정면허)':'#ad1457'
+};
+
+let busData=null, routePaths=null, routeTimes=null, stopIndex=null;
+let kakaoMap=null;
+let overlays={};
+let iwOpen=null;
+// 정류장 클릭 레지스트리 (CustomOverlay onclick용)
+let __stopRegistry=[];
+let searchPin=null; // 검색 결과 핀 (단일 관리, 누적 방지)
+function clearTempPins() {
+  if (searchPin) { searchPin.setMap(null); searchPin = null; }
+  if (nearStopMarker) { nearStopMarker.setMap(null); nearStopMarker = null; }
+}
+function __stopClick(id) {
+  const entry = __stopRegistry[id];
+  if (!entry) return;
+  if (iwOpen) iwOpen.close();
+  entry.iw.setPosition(entry.pos);
+  entry.iw.open(kakaoMap);
+  iwOpen = entry.iw;
+}
+
+// ── 초기화 ──
+window.onload = async function() {
+  kakao.maps.load(function() {
+    kakaoMap = new kakao.maps.Map(document.getElementById('map'), {
+      center: new kakao.maps.LatLng(37.3422, 127.9201), level: 7
+    });
+    kakaoMap.addControl(new kakao.maps.ZoomControl(), kakao.maps.ControlPosition.RIGHT);
+    kakao.maps.event.addListener(kakaoMap,'click',()=>{
+      if(iwOpen) iwOpen.close();
+      hideContextMenu();
+      clearTempPins(); // 검색핀·주변정류장핀 정리
+    });
+
+    // 우클릭 컨텍스트 메뉴 (지도 컨테이너 오프셋 보정)
+    kakao.maps.event.addListener(kakaoMap, 'rightclick', function(e) {
+      const lat = e.latLng.getLat();
+      const lng = e.latLng.getLng();
+      const rect = document.getElementById('map').getBoundingClientRect();
+      showContextMenu(lat, lng, rect.left + e.point.x, rect.top + e.point.y);
+    });
+  });
+
+  const [bd, rp, rt, si] = await Promise.all([
+    fetch('bus_data.json').then(r=>r.json()),
+    fetch('route_paths.json').then(r=>r.json()),
+    fetch('route_times.json').then(r=>r.json()),
+    fetch('stop_index.json').then(r=>r.json()),
+  ]);
+  busData=bd; routePaths=rp; routeTimes=rt; stopIndex=si;
+
+  buildCheckList();
+  buildTTSelect();
+  buildSummaryCards();
+  document.getElementById('data-note').textContent =
+    `운행기록부 26.5.11판 | ${Object.keys(rp).length}개 노선`;
+};
+
+// ── 노선 체크리스트 (단일=직접체크, 복수=펼침) ──
+function buildCheckList() {
+  const wrap = document.getElementById('route-check-list');
+  for (const [sachin, variants] of Object.entries(routePaths)) {
+    const color    = COLORS[sachin] || '#999';
+    const varNames = Object.keys(variants);
+    const isSingle = varNames.length === 1;
+
+    if (isSingle) {
+      // 단일 변형: 체크박스 바로 표시
+      const vname = varNames[0];
+      const row = document.createElement('div');
+      row.className = 'route-row';
+      const uid = 'chk_' + sachin.replace(/[^a-zA-Z0-9가-힣]/g,'_');
+      row.innerHTML = `
+        <input type="checkbox" id="${uid}" data-sachin="${sachin}" data-var="${vname}" onchange="onCheck(this)">
+        <div class="route-dot" style="background:${color}"></div>
+        <label class="route-label" for="${uid}" style="color:${color}">${sachin}</label>`;
+      wrap.appendChild(row);
+    } else {
+      // 복수 변형: 그룹 헤더 + 펼침
+      const header = document.createElement('div');
+      header.className = 'group-header';
+      header.innerHTML = `
+        <div class="route-dot" style="background:${color}"></div>
+        <span class="route-label" style="color:${color}">${sachin}</span>
+        <span class="group-arrow">▶</span>`;
+      const vlist = document.createElement('div');
+      vlist.className = 'variant-list';
+      header.onclick = () => {
+        vlist.classList.toggle('open');
+        header.querySelector('.group-arrow').textContent =
+          vlist.classList.contains('open') ? '▼' : '▶';
+      };
+      varNames.forEach(vname => {
+        const vrow = document.createElement('div');
+        vrow.className = 'variant-row';
+        const uid = 'chk_' + (sachin+vname).replace(/[^a-zA-Z0-9가-힣]/g,'_');
+        vrow.innerHTML = `
+          <input type="checkbox" id="${uid}" data-sachin="${sachin}" data-var="${vname}" onchange="onCheck(this)">
+          <label class="variant-label" for="${uid}">${vname}</label>`;
+        vlist.appendChild(vrow);
+      });
+      wrap.appendChild(header);
+      wrap.appendChild(vlist);
+    }
+  }
+}
+
+function onCheck(chk) {
+  chk.checked
+    ? showVariant(chk.dataset.sachin, chk.dataset.var)
+    : hideVariant(chk.dataset.sachin, chk.dataset.var);
+}
+
+// ── 노선 표시/숨김 ──
+function showVariant(sachin, vname) {
+  const key = sachin+'||'+vname;
+  if (overlays[key]) return;
+  const content = routePaths[sachin]?.[vname];
+  if (!content) return;
+
+  const baseColor = COLORS[sachin] || '#1a56a0';
+  const upColor   = baseColor;
+  const downColor = shadeColor(baseColor, -30);
+
+  overlays[key] = { polylines:[], markers:[], customs:[] };
+
+  const segList = content.segs || [content.path];
+
+  if (segList.length > 1) {
+    // 다중 세그먼트(왕편·복편 별도 궤적): 전체 동일 색 실선
+    segList.forEach(seg => {
+      const line = new kakao.maps.Polyline({
+        path: seg.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+        strokeWeight:5, strokeColor:upColor, strokeOpacity:0.85,
+        strokeStyle:'solid', map:kakaoMap
+      });
+      overlays[key].polylines.push(line);
+    });
+  } else {
+    const pathArr = segList[0];
+    // 정류장의 방향 전환 지점을 기준으로 path를 상행/하행 구간으로 분리
+    const dirChangeIdx = [];
+    for (let i=1; i<content.stops.length; i++) {
+      if (content.stops[i].dir !== content.stops[i-1].dir) dirChangeIdx.push(i);
+    }
+
+    if (dirChangeIdx.length === 0) {
+      const line = new kakao.maps.Polyline({
+        path: pathArr.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+        strokeWeight:5, strokeColor:upColor, strokeOpacity:0.82,
+        strokeStyle:'solid', map:kakaoMap
+      });
+      overlays[key].polylines.push(line);
+    } else {
+      const splitStop = content.stops[dirChangeIdx[0]];
+      let splitIdx = pathArr.findIndex(p =>
+        Math.abs(p[0]-splitStop.lat)<0.0015 && Math.abs(p[1]-splitStop.lng)<0.0015);
+      if (splitIdx <= 0) splitIdx = Math.floor(pathArr.length/2);
+
+      const upPath   = pathArr.slice(0, splitIdx+1);
+      const downPath = pathArr.slice(splitIdx);
+
+      const line1 = new kakao.maps.Polyline({
+        path: upPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+        strokeWeight:5, strokeColor:upColor, strokeOpacity:0.85,
+        strokeStyle:'solid', map:kakaoMap
+      });
+      const line2 = new kakao.maps.Polyline({
+        path: downPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+        strokeWeight:5, strokeColor:downColor, strokeOpacity:0.85,
+        strokeStyle:'shortdash', map:kakaoMap
+      });
+      overlays[key].polylines.push(line1, line2);
+    }
+  }
+
+  // 정류장 마커
+  content.stops.forEach((s,i) => {
+    if (!s.lat||!s.lng) return;
+    const pos = new kakao.maps.LatLng(s.lat, s.lng);
+    const isTerminal = (i===0||i===content.stops.length-1);
+    const dotColor = s.dir === '하행' ? downColor : upColor;
+
+    const relatedRoutes = (stopIndex[s.name]||[])
+      .map(r=>r.sachin).filter((v,i,a)=>a.indexOf(v)===i);
+
+    let routeHtml = relatedRoutes.map(rs => {
+      const times = routeTimes[rs] || [];
+      const timeStr = times.map(t=>`<span style="color:#888">${t.day}:</span> ${t.first}~${t.last}`).join(' / ');
+      return `<div class="iw-route">
+        <span class="iw-route-name" style="color:${COLORS[rs]||'#333'}">● ${rs}</span>
+        <div class="iw-times">${timeStr||'시간정보 없음'}</div>
+      </div>`;
+    }).join('');
+
+    const dirBadge = s.dir ? `<span style="font-size:10px;background:${dotColor};color:#fff;border-radius:3px;padding:1px 5px;margin-left:5px">${s.dir}</span>` : '';
+
+    const iwContent = `<div class="stop-iw">
+      <div class="iw-name">${s.name}${dirBadge}</div>
+      ${routeHtml}
+      <button class="iw-go-btn" onclick="goToTimetable('${relatedRoutes[0]||''}')">📋 시간표 보기</button>
+    </div>`;
+
+    const iw = new kakao.maps.InfoWindow({ content:iwContent, removable:true });
+
+    // 모든 정류장을 클릭 가능한 점으로 통일 (기점·종점은 약간 크게, 파란 기본마커 제거)
+    const dotSize = isTerminal ? 15 : 11;
+    const stopId = __stopRegistry.length;
+    __stopRegistry.push({ iw, pos });
+    const dot = new kakao.maps.CustomOverlay({
+      position:pos, zIndex: isTerminal ? 5 : 4, xAnchor:0.5, yAnchor:0.5,
+      content:`<div onclick="__stopClick(${stopId})" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+        <div style="width:${dotSize}px;height:${dotSize}px;border-radius:50%;background:${dotColor};border:${isTerminal?3:2}px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.45)"></div>
+      </div>`
+    });
+    dot.setMap(kakaoMap);
+    overlays[key].customs.push(dot);
+  });
+  fitBoundsAll();
+}
+
+// 색상 밝기 조정 (양수: 밝게, 음수: 어둡게)
+function shadeColor(hex, percent) {
+  hex = hex.replace('#','');
+  let r = parseInt(hex.substring(0,2),16);
+  let g = parseInt(hex.substring(2,4),16);
+  let b = parseInt(hex.substring(4,6),16);
+  r = Math.max(0,Math.min(255, Math.round(r*(100+percent)/100)));
+  g = Math.max(0,Math.min(255, Math.round(g*(100+percent)/100)));
+  b = Math.max(0,Math.min(255, Math.round(b*(100+percent)/100)));
+  return '#' + [r,g,b].map(v=>v.toString(16).padStart(2,'0')).join('');
+}
+
+function hideVariant(sachin, vname) {
+  const key = sachin+'||'+vname;
+  if (!overlays[key]) return;
+  overlays[key].polylines.forEach(p=>p.setMap(null));
+  overlays[key].markers.forEach(m=>m.setMap(null));
+  overlays[key].customs.forEach(c=>c.setMap(null));
+  delete overlays[key];
+}
+
+function fitBoundsAll() {
+  const bounds = new kakao.maps.LatLngBounds();
+  let any=false;
+  Object.values(overlays).forEach(ov=>{
+    ov.polylines.forEach(p=>{p.getPath().forEach(ll=>{bounds.extend(ll);any=true;});});
+  });
+  if(any) kakaoMap.setBounds(bounds);
+}
+
+function selectAll() {
+  document.querySelectorAll('#route-check-list input').forEach(c=>{
+    if(!c.checked){c.checked=true;showVariant(c.dataset.sachin,c.dataset.var);}
+  });
+  document.querySelectorAll('.variant-list').forEach(v=>v.classList.add('open'));
+  document.querySelectorAll('.group-arrow').forEach(a=>a.textContent='▼');
+}
+function clearAll() {
+  document.querySelectorAll('#route-check-list input').forEach(c=>{
+    if(c.checked){c.checked=false;hideVariant(c.dataset.sachin,c.dataset.var);}
+  });
+}
+
+// ── 통합 검색 (정류장 + 주소) ──
+let searchTimer = null;
+function onStopSearch(val) {
+  const clearBtn = document.getElementById('stop-search-clear');
+  const results  = document.getElementById('stop-search-results');
+  clearBtn.style.display = val ? 'block' : 'none';
+  clearTimeout(searchTimer);
+
+  if (!val || val.length < 1) { results.style.display='none'; return; }
+
+  // 정류장 매칭 (즉시)
+  const stopMatched = Object.keys(stopIndex)
+    .filter(name => name.includes(val))
+    .slice(0, 10);
+
+  let html = '';
+  if (stopMatched.length) {
+    html += `<div style="padding:4px 8px;font-size:10px;color:#888;background:#f5f7fa">🚌 정류장</div>`;
+    html += stopMatched.map(name => {
+      const routes = [...new Set((stopIndex[name]||[]).map(r=>r.sachin))];
+      const dots   = routes.map(r=>`<span style="color:${COLORS[r]||'#999'}">●</span>`).join(' ');
+      return `<div class="stop-result-item" onclick="selectStop('${name.replace(/'/g,"\\'")}')">
+        <div class="stop-result-name">${name}</div>
+        <div class="stop-result-routes">${dots} ${routes.join(', ')}</div>
+      </div>`;
+    }).join('');
+  }
+
+  // 주소 검색 (카카오 장소 검색, 300ms 디바운스)
+  if (val.length >= 2) {
+    html += `<div id="addr-results" style="padding:4px 8px;font-size:10px;color:#888;background:#f5f7fa">🏠 주소 검색 중…</div>`;
+    searchTimer = setTimeout(() => {
+      const ps = new kakao.maps.services.Places();
+      ps.keywordSearch(val, function(data, status) {
+        const addrEl = document.getElementById('addr-results');
+        if (!addrEl) return;
+        if (status === kakao.maps.services.Status.OK && data.length) {
+          let addrHtml = `<div style="padding:4px 8px;font-size:10px;color:#888;background:#f5f7fa">🏠 주소</div>`;
+          addrHtml += data.slice(0,5).map(p => `
+            <div class="stop-result-item" onclick="moveToAddress(${p.y},${p.x},'${p.place_name.replace(/'/g,"\\'")}')">
+              <div class="stop-result-name">${p.place_name}</div>
+              <div class="stop-result-routes" style="color:#888">${p.road_address_name||p.address_name||''}</div>
+            </div>`).join('');
+          addrEl.outerHTML = addrHtml;
+        } else {
+          addrEl.outerHTML = '';
+        }
+      }, { size: 5 });
+    }, 300);
+  }
+
+  results.innerHTML = html || '<div style="padding:8px;font-size:12px;color:#aaa;text-align:center">검색 결과 없음</div>';
+  results.style.display = 'block';
+}
+
+function moveToAddress(lat, lng, name) {
+  clearStopSearch();
+  const pos = new kakao.maps.LatLng(lat, lng);
+  kakaoMap.setCenter(pos);
+  kakaoMap.setLevel(3);
+  clearTempPins();
+  searchPin = new kakao.maps.Marker({ position: pos, map: kakaoMap });
+  const iw = new kakao.maps.InfoWindow({
+    content: `<div style="padding:6px 10px;font-size:12px;font-weight:700">${name}</div>`,
+    removable: true
+  });
+  if (iwOpen) iwOpen.close();
+  iw.open(kakaoMap, searchPin);
+  iwOpen = iw;
+  showToast(name);
+}
+
+function clearStopSearch() {
+  document.getElementById('stop-search').value = '';
+  document.getElementById('stop-search-clear').style.display = 'none';
+  document.getElementById('stop-search-results').style.display = 'none';
+}
+
+function selectStop(name) {
+  clearStopSearch();
+  const entries = stopIndex[name];
+  if (!entries||!entries.length) return;
+
+  // 첫 번째 유효 좌표로 이동
+  const entry = entries.find(e=>e.lat&&e.lng);
+  if (!entry) return;
+
+  const pos = new kakao.maps.LatLng(entry.lat, entry.lng);
+  kakaoMap.setCenter(pos);
+  kakaoMap.setLevel(4);
+
+  // 인포윈도우 표시
+  const routes = [...new Set(entries.map(e=>e.sachin))];
+  let routeHtml = routes.map(rs => {
+    const times = routeTimes[rs]||[];
+    const timeStr = times.map(t=>`<span style="color:#888">${t.day}:</span> ${t.first}~${t.last}`).join(' / ');
+    return `<div class="iw-route">
+      <span class="iw-route-name" style="color:${COLORS[rs]||'#333'}">● ${rs}</span>
+      <div class="iw-times">${timeStr||'시간정보 없음'}</div>
+    </div>`;
+  }).join('');
+
+  const iw = new kakao.maps.InfoWindow({
+    content:`<div class="stop-iw">
+      <div class="iw-name">🔍 ${name}</div>
+      ${routeHtml}
+      <button class="iw-go-btn" onclick="goToTimetable('${routes[0]||''}')">📋 시간표 보기</button>
+    </div>`,
+    removable:true
+  });
+
+  clearTempPins();
+  searchPin = new kakao.maps.Marker({ position:pos, map:kakaoMap });
+  if(iwOpen) iwOpen.close();
+  iw.open(kakaoMap, searchPin);
+  iwOpen = iw;
+}
+
+// ── 시간표로 이동 ──
+function goToTimetable(sachin) {
+  if(iwOpen) iwOpen.close();
+  document.getElementById('tt-route').value = sachin;
+  // 요일 자동 설정: 첫 번째 요일
+  const times = routeTimes[sachin]||[];
+  if(times.length) {
+    const ds = document.getElementById('tt-day');
+    for(let o of ds.options){ if(o.value===times[0].day){ds.value=times[0].day;break;} }
+  }
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('timetable-panel').classList.add('active');
+  document.querySelectorAll('.tab-btn')[1].classList.add('active');
+  onTTFilter();
+  window.scrollTo(0,0);
+}
+
+// ── 우클릭 컨텍스트 메뉴 ──
+let ctxLat = 0, ctxLng = 0, ctxAddress = '';
+let nearStopMarker = null; // 주변정류장 핀 (토글용)
+
+function showContextMenu(lat, lng, px, py) {
+  ctxLat = lat; ctxLng = lng; ctxAddress = '';
+  const menu = document.getElementById('ctx-menu');
+  document.getElementById('ctx-address').textContent = '주소 조회 중…';
+  document.getElementById('ctx-coord').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  document.getElementById('ctx-coord-wrap').style.display = 'none';
+
+  const mw=200, mh=230;
+  const x = (px + mw > window.innerWidth)  ? px - mw : px;
+  const y = (py + mh > window.innerHeight) ? py - mh : py;
+  menu.style.left = x + 'px';
+  menu.style.top  = y + 'px';
+  menu.style.display = 'block';
+
+  const geocoder = new kakao.maps.services.Geocoder();
+  geocoder.coord2Address(lng, lat, function(result, status) {
+    if (status === kakao.maps.services.Status.OK) {
+      const addr = result[0];
+      ctxAddress = addr.road_address
+        ? addr.road_address.address_name
+        : addr.address.address_name;
+      document.getElementById('ctx-address').textContent = ctxAddress;
+    } else {
+      document.getElementById('ctx-address').textContent = '주소 없음';
+    }
+  });
+}
+
+function toggleCtxCoord() {
+  const wrap = document.getElementById('ctx-coord-wrap');
+  wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
+}
+
+function hideContextMenu() {
+  document.getElementById('ctx-menu').style.display = 'none';
+}
+
+function ctxCopyCoord() {
+  navigator.clipboard.writeText(`${ctxLat.toFixed(6)}, ${ctxLng.toFixed(6)}`);
+  showToast('좌표가 복사됐습니다.');
+  hideContextMenu();
+}
+
+function ctxCopyAddress() {
+  if (!ctxAddress) { showToast('주소 조회 중입니다. 잠시 후 다시 시도해주세요.'); return; }
+  navigator.clipboard.writeText(ctxAddress);
+  showToast('주소가 복사됐습니다.');
+  hideContextMenu();
+}
+
+function ctxOpenKakao() {
+  window.open(`https://map.kakao.com/link/map/${ctxLat.toFixed(6)},${ctxLng.toFixed(6)}`, '_blank');
+  hideContextMenu();
+}
+
+function ctxFindNearStop() {
+  hideContextMenu();
+  if (!stopIndex) return;
+
+  // 이미 표시 중이면 닫기 (토글)
+  if (nearStopMarker) {
+    if (iwOpen) iwOpen.close();
+    nearStopMarker.setMap(null);
+    nearStopMarker = null;
+    return;
+  }
+
+  const found = [];
+  const seen  = new Set();
+  for (const [name, entries] of Object.entries(stopIndex)) {
+    if (seen.has(name)) continue;
+    const e = entries.find(x=>x.lat&&x.lng);
+    if (!e) continue;
+    const d = haversineSimple(ctxLat, ctxLng, e.lat, e.lng);
+    if (d <= 300) { found.push({ name, d, entries }); seen.add(name); }
+  }
+  found.sort((a,b) => a.d - b.d);
+
+  if (!found.length) { showToast('300m 이내 정류장 없음'); return; }
+
+  let html = `<div style="padding:10px 14px;min-width:200px;max-width:280px">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-weight:700;color:#1a56a0;font-size:13px">🚌 주변 정류장 (${found.length}개)</span>
+      <span onclick="closeNearStop()" style="cursor:pointer;color:#aaa;font-size:16px;padding:0 4px">✕</span>
+    </div>`;
+  found.slice(0,8).forEach(f => {
+    const routes = [...new Set(f.entries.map(x=>x.sachin))];
+    const dots   = routes.map(r=>`<span style="color:${COLORS[r]||'#999'}">●</span>`).join('');
+    html += `<div style="margin-bottom:7px;font-size:12px;cursor:pointer"
+      onclick="selectStop('${f.name.replace(/'/g,"\\'")}')">
+      <b>${f.name}</b> <span style="color:#888;font-size:10px">${Math.round(f.d)}m</span><br>
+      <span style="font-size:11px">${dots} ${routes.join(', ')}</span>
+    </div>`;
+  });
+  html += '</div>';
+
+  const pos = new kakao.maps.LatLng(ctxLat, ctxLng);
+  if (searchPin) { searchPin.setMap(null); searchPin = null; }
+  nearStopMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap });
+  const iw = new kakao.maps.InfoWindow({ content: html, removable: false });
+  if (iwOpen) iwOpen.close();
+  iw.open(kakaoMap, nearStopMarker);
+  iwOpen = iw;
+}
+
+function closeNearStop() {
+  if (iwOpen) iwOpen.close();
+  if (nearStopMarker) { nearStopMarker.setMap(null); nearStopMarker = null; }
+}
+
+function haversineSimple(lat1,lng1,lat2,lng2){
+  const R=6371000;
+  const p1=lat1*Math.PI/180, p2=lat2*Math.PI/180;
+  const dp=(lat2-lat1)*Math.PI/180, dl=(lng2-lng1)*Math.PI/180;
+  const a=Math.sin(dp/2)**2+Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
+  return 2*R*Math.asin(Math.sqrt(a));
+}
+
+// 토스트 알림
+function showToast(msg) {
+  let t = document.getElementById('toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toast';
+    t.style.cssText = `position:fixed;bottom:30px;left:50%;transform:translateX(-50%);
+      background:rgba(0,0,0,0.75);color:#fff;padding:8px 18px;border-radius:20px;
+      font-size:13px;z-index:99999;transition:opacity 0.3s;pointer-events:none`;
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => { t.style.opacity = '0'; }, 2000);
+}
+
+// ── 사이드바 접기 ──
+function toggleSidebar() {
+  const panel = document.getElementById('map-controls');
+  const btn = document.getElementById('collapse-btn');
+  panel.classList.toggle('collapsed');
+  btn.textContent = panel.classList.contains('collapsed') ? '▶' : '◀';
+}
+
+// ── 탭 ──
+function switchTab(tab, btn) {
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById(tab+'-panel').classList.add('active');
+  btn.classList.add('active');
+  if(tab==='map'&&kakaoMap) setTimeout(()=>kakaoMap.relayout(),100);
+}
+
+// ── 시간표 ──
+function buildTTSelect() {
+  const sel = document.getElementById('tt-route');
+  busData.routes.forEach(r=>{
+    const o=document.createElement('option'); o.value=r; o.textContent=r; sel.appendChild(o);
+  });
+}
+function onTTFilter() {
+  const route=document.getElementById('tt-route').value;
+  const day  =document.getElementById('tt-day').value;
+  if(!route||!day){
+    document.getElementById('tt-summary').innerHTML='';
+    document.getElementById('tt-table').innerHTML='<div class="empty-msg">노선과 요일을 선택하면 시간표가 표시됩니다.</div>';
+    return;
+  }
+  const rows=busData.timetable[`${route}||${day}`];
+  if(!rows||!rows.length){
+    const alts=Object.keys(busData.timetable).filter(k=>k.startsWith(route+'||'));
+    document.getElementById('tt-summary').innerHTML='';
+    document.getElementById('tt-table').innerHTML=alts.length
+      ?`<div class="empty-msg">선택 요일 데이터 없음.<br>이 노선은 <b>"${alts[0].split('||')[1]}"</b> 데이터만 있습니다.</div>`
+      :'<div class="empty-msg">데이터 없음</div>';
+    return;
+  }
+  const color=COLORS[route]||'#1a56a0';
+  const s=(busData.summary||[]).find(x=>x['조회키']===`${route} | ${day}`);
+  const times=rows.flatMap(r=>[r.o,r.i]).filter(t=>t&&t!=='-'&&/^\d{2}:\d{2}$/.test(t)).sort();
+  document.getElementById('tt-summary').innerHTML=`
+    <div class="summary-card">
+      <div class="card-title" style="color:${color}">🚌 ${route}
+        <small style="font-size:12px;color:#888;font-weight:400">(${day})</small></div>
+      <div class="stat-box"><div class="val">${s?s['운행순번 수']:'-'}</div><div class="lbl">운행순번</div></div>
+      <div class="stat-box"><div class="val">${s?s['총 운행횟수']:rows.length}</div><div class="lbl">총 운행횟수</div></div>
+      <div class="stat-box"><div class="val" style="font-size:14px">${s?s['첫 출발']:(times[0]||'-')}</div><div class="lbl">첫 출발</div></div>
+      <div class="stat-box"><div class="val" style="font-size:14px">${s?s['마지막 출발']:(times[times.length-1]||'-')}</div><div class="lbl">마지막 출발</div></div>
+    </div>`;
+  let html=`<table><thead><tr>
+    <th>순번</th><th>회차</th><th>왕편 출발</th><th>복편 출발</th><th>행선지</th><th>비고</th>
+  </tr></thead><tbody>`;
+  rows.forEach(r=>{
+    const seq=r.s&&!isNaN(r.s)?`<span class="seq-badge">${r.s}</span>`:`<span style="font-size:11px;color:#888">${r.s}</span>`;
+    html+=`<tr><td>${seq}</td><td>${r.t}</td><td><b>${r.o||'-'}</b></td><td><b>${r.i||'-'}</b></td><td>${r.d||''}</td><td class="note-cell">${r.n||''}</td></tr>`;
+  });
+  document.getElementById('tt-table').innerHTML=html+'</tbody></table>';
+}
+
+// ── 노선요약 ──
+function buildSummaryCards() {
+  if(!busData?.summary) return;
+  let html='';
+  busData.summary.forEach(s=>{
+    if(!s['조회키']||s['조회키'].startsWith('※')||!s['노선그룹']) return;
+    const c=COLORS[s['노선그룹']]||'#1a56a0';
+    html+=`<div class="scard" onclick="jumpToTT('${s['노선그룹']}','${s['요일구분']}')">
+      <div class="scard-left">
+        <div class="route-name" style="color:${c}">${s['노선그룹']}</div>
+        <div class="day-type">${s['요일구분']} · 노선번호 ${s['노선번호']}</div>
+      </div>
+      <div class="scard-right">
+        <div class="times">${s['첫 출발']} ~ ${s['마지막 출발']}</div>
+        <div class="counts">순번 ${s['운행순번 수']}개 · 총 ${s['총 운행횟수']}회</div>
+      </div>
+    </div>`;
+  });
+  document.getElementById('summary-grid').innerHTML=html||'<div class="empty-msg">데이터 없음</div>';
+}
+function jumpToTT(route,day) {
+  document.getElementById('tt-route').value=route;
+  const ds=document.getElementById('tt-day');
+  for(let o of ds.options){if(o.value===day){ds.value=day;break;}}
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  document.getElementById('timetable-panel').classList.add('active');
+  document.querySelectorAll('.tab-btn')[1].classList.add('active');
+  onTTFilter(); window.scrollTo(0,0);
+}
+</script>
+</body>
+</html>
