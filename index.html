@@ -190,10 +190,14 @@
 <!-- 우클릭 컨텍스트 메뉴 -->
 <div id="ctx-menu">
   <div class="ctx-header">📍 선택한 위치</div>
-  <div id="ctx-coord">-</div>
+  <div id="ctx-address" style="padding:3px 16px 2px;font-size:12px;font-weight:700;color:#222">주소 조회 중…</div>
+  <div id="ctx-coord-wrap" style="display:none">
+    <div id="ctx-coord" style="padding:1px 16px 5px;font-size:10px;color:#aaa;user-select:all">-</div>
+  </div>
+  <div class="ctx-item" style="font-size:11px;color:#888;padding:3px 16px" onclick="toggleCtxCoord()">▸ 좌표 보기/숨기기</div>
   <hr class="ctx-divider">
-  <div class="ctx-item" onclick="ctxCopyCoord()">📋 좌표 복사</div>
-  <div class="ctx-item" onclick="ctxCopyAddress()">🏠 주소 복사</div>
+  <div class="ctx-item" onclick="ctxCopyAddress()">📋 주소 복사</div>
+  <div class="ctx-item" onclick="ctxCopyCoord()">📌 좌표 복사</div>
   <div class="ctx-item" onclick="ctxOpenKakao()">🗺 카카오맵에서 열기</div>
   <hr class="ctx-divider">
   <div class="ctx-item" onclick="ctxFindNearStop()">🚌 주변 정류장 찾기</div>
@@ -218,9 +222,9 @@
 <div id="map-panel" class="panel active">
   <div id="map-controls">
     <button class="collapse-toggle" onclick="toggleSidebar()" id="collapse-btn">◀</button>
-    <span class="ctrl-title">🔍 정류장 검색</span>
+    <span class="ctrl-title">🔍 검색 (정류장 · 주소)</span>
     <div id="stop-search-wrap">
-      <input type="text" id="stop-search" placeholder="정류장명 입력…" oninput="onStopSearch(this.value)" autocomplete="off">
+      <input type="text" id="stop-search" placeholder="정류장명 또는 주소 입력…" oninput="onStopSearch(this.value)" autocomplete="off">
       <span id="stop-search-clear" onclick="clearStopSearch()">✕</span>
       <div id="stop-search-results"></div>
     </div>
@@ -278,6 +282,11 @@ let overlays={};
 let iwOpen=null;
 // 정류장 클릭 레지스트리 (CustomOverlay onclick용)
 let __stopRegistry=[];
+let searchPin=null; // 검색 결과 핀 (단일 관리, 누적 방지)
+function clearTempPins() {
+  if (searchPin) { searchPin.setMap(null); searchPin = null; }
+  if (nearStopMarker) { nearStopMarker.setMap(null); nearStopMarker = null; }
+}
 function __stopClick(id) {
   const entry = __stopRegistry[id];
   if (!entry) return;
@@ -297,13 +306,15 @@ window.onload = async function() {
     kakao.maps.event.addListener(kakaoMap,'click',()=>{
       if(iwOpen) iwOpen.close();
       hideContextMenu();
+      clearTempPins(); // 검색핀·주변정류장핀 정리
     });
 
-    // 우클릭 컨텍스트 메뉴
+    // 우클릭 컨텍스트 메뉴 (지도 컨테이너 오프셋 보정)
     kakao.maps.event.addListener(kakaoMap, 'rightclick', function(e) {
       const lat = e.latLng.getLat();
       const lng = e.latLng.getLng();
-      showContextMenu(lat, lng, e.point.x, e.point.y);
+      const rect = document.getElementById('map').getBoundingClientRect();
+      showContextMenu(lat, lng, rect.left + e.point.x, rect.top + e.point.y);
     });
   });
 
@@ -385,48 +396,59 @@ function showVariant(sachin, vname) {
   if (!content) return;
 
   const baseColor = COLORS[sachin] || '#1a56a0';
-  const upColor   = baseColor;               // 상행: 원색
-  const downColor = shadeColor(baseColor, -30); // 하행: 어둡게
+  const upColor   = baseColor;
+  const downColor = shadeColor(baseColor, -30);
 
   overlays[key] = { polylines:[], markers:[], customs:[] };
 
-  // 정류장의 방향 전환 지점을 기준으로 path를 상행/하행 구간으로 분리
-  // stops와 path는 개별 계산이라 인덱스 직접 매핑이 어려우므로,
-  // stops 배열의 방향 전환 시점 좌표를 기준으로 path를 나눔
-  const dirChangeIdx = [];
-  for (let i=1; i<content.stops.length; i++) {
-    if (content.stops[i].dir !== content.stops[i-1].dir) dirChangeIdx.push(i);
-  }
+  const segList = content.segs || [content.path];
 
-  if (dirChangeIdx.length === 0) {
-    // 방향 구분 없음(순환노선) → 단일 색상
-    const line = new kakao.maps.Polyline({
-      path: content.path.map(c=>new kakao.maps.LatLng(c[0],c[1])),
-      strokeWeight:5, strokeColor:upColor, strokeOpacity:0.82,
-      strokeStyle:'solid', map:kakaoMap
+  if (segList.length > 1) {
+    // 다중 세그먼트(왕편·복편 별도 궤적): 전체 동일 색 실선
+    segList.forEach(seg => {
+      const line = new kakao.maps.Polyline({
+        path: seg.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+        strokeWeight:5, strokeColor:upColor, strokeOpacity:0.85,
+        strokeStyle:'solid', map:kakaoMap
+      });
+      overlays[key].polylines.push(line);
     });
-    overlays[key].polylines.push(line);
   } else {
-    // 전환 지점의 좌표를 기준으로 path 분할
-    const splitStop = content.stops[dirChangeIdx[0]];
-    let splitIdx = content.path.findIndex(p =>
-      Math.abs(p[0]-splitStop.lat)<0.0015 && Math.abs(p[1]-splitStop.lng)<0.0015);
-    if (splitIdx <= 0) splitIdx = Math.floor(content.path.length/2);
+    const pathArr = segList[0];
+    // 정류장의 방향 전환 지점을 기준으로 path를 상행/하행 구간으로 분리
+    const dirChangeIdx = [];
+    for (let i=1; i<content.stops.length; i++) {
+      if (content.stops[i].dir !== content.stops[i-1].dir) dirChangeIdx.push(i);
+    }
 
-    const upPath   = content.path.slice(0, splitIdx+1);
-    const downPath = content.path.slice(splitIdx);
+    if (dirChangeIdx.length === 0) {
+      const line = new kakao.maps.Polyline({
+        path: pathArr.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+        strokeWeight:5, strokeColor:upColor, strokeOpacity:0.82,
+        strokeStyle:'solid', map:kakaoMap
+      });
+      overlays[key].polylines.push(line);
+    } else {
+      const splitStop = content.stops[dirChangeIdx[0]];
+      let splitIdx = pathArr.findIndex(p =>
+        Math.abs(p[0]-splitStop.lat)<0.0015 && Math.abs(p[1]-splitStop.lng)<0.0015);
+      if (splitIdx <= 0) splitIdx = Math.floor(pathArr.length/2);
 
-    const line1 = new kakao.maps.Polyline({
-      path: upPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),
-      strokeWeight:5, strokeColor:upColor, strokeOpacity:0.85,
-      strokeStyle:'solid', map:kakaoMap
-    });
-    const line2 = new kakao.maps.Polyline({
-      path: downPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),
-      strokeWeight:5, strokeColor:downColor, strokeOpacity:0.85,
-      strokeStyle:'shortdash', map:kakaoMap
-    });
-    overlays[key].polylines.push(line1, line2);
+      const upPath   = pathArr.slice(0, splitIdx+1);
+      const downPath = pathArr.slice(splitIdx);
+
+      const line1 = new kakao.maps.Polyline({
+        path: upPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+        strokeWeight:5, strokeColor:upColor, strokeOpacity:0.85,
+        strokeStyle:'solid', map:kakaoMap
+      });
+      const line2 = new kakao.maps.Polyline({
+        path: downPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),
+        strokeWeight:5, strokeColor:downColor, strokeOpacity:0.85,
+        strokeStyle:'shortdash', map:kakaoMap
+      });
+      overlays[key].polylines.push(line1, line2);
+    }
   }
 
   // 정류장 마커
@@ -458,25 +480,18 @@ function showVariant(sachin, vname) {
 
     const iw = new kakao.maps.InfoWindow({ content:iwContent, removable:true });
 
-    if (isTerminal) {
-      const marker = new kakao.maps.Marker({ position:pos, map:kakaoMap });
-      kakao.maps.event.addListener(marker,'click',()=>{
-        if(iwOpen) iwOpen.close(); iw.open(kakaoMap,marker); iwOpen=iw;
-      });
-      overlays[key].markers.push(marker);
-    } else {
-      // 점 자체가 클릭 요소: 26px 히트영역 안에 11px 점
-      const stopId = __stopRegistry.length;
-      __stopRegistry.push({ iw, pos });
-      const dot = new kakao.maps.CustomOverlay({
-        position:pos, zIndex:4, xAnchor:0.5, yAnchor:0.5,
-        content:`<div onclick="__stopClick(${stopId})" style="width:26px;height:26px;display:flex;align-items:center;justify-content:center;cursor:pointer">
-          <div style="width:11px;height:11px;border-radius:50%;background:${dotColor};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.45)"></div>
-        </div>`
-      });
-      dot.setMap(kakaoMap);
-      overlays[key].customs.push(dot);
-    }
+    // 모든 정류장을 클릭 가능한 점으로 통일 (기점·종점은 약간 크게, 파란 기본마커 제거)
+    const dotSize = isTerminal ? 15 : 11;
+    const stopId = __stopRegistry.length;
+    __stopRegistry.push({ iw, pos });
+    const dot = new kakao.maps.CustomOverlay({
+      position:pos, zIndex: isTerminal ? 5 : 4, xAnchor:0.5, yAnchor:0.5,
+      content:`<div onclick="__stopClick(${stopId})" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer">
+        <div style="width:${dotSize}px;height:${dotSize}px;border-radius:50%;background:${dotColor};border:${isTerminal?3:2}px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.45)"></div>
+      </div>`
+    });
+    dot.setMap(kakaoMap);
+    overlays[key].customs.push(dot);
   });
   fitBoundsAll();
 }
@@ -524,29 +539,76 @@ function clearAll() {
   });
 }
 
-// ── 정류장 검색 ──
+// ── 통합 검색 (정류장 + 주소) ──
+let searchTimer = null;
 function onStopSearch(val) {
   const clearBtn = document.getElementById('stop-search-clear');
   const results  = document.getElementById('stop-search-results');
   clearBtn.style.display = val ? 'block' : 'none';
+  clearTimeout(searchTimer);
 
   if (!val || val.length < 1) { results.style.display='none'; return; }
 
-  const matched = Object.keys(stopIndex)
+  // 정류장 매칭 (즉시)
+  const stopMatched = Object.keys(stopIndex)
     .filter(name => name.includes(val))
-    .slice(0, 20);
+    .slice(0, 10);
 
-  if (!matched.length) { results.style.display='none'; return; }
+  let html = '';
+  if (stopMatched.length) {
+    html += `<div style="padding:4px 8px;font-size:10px;color:#888;background:#f5f7fa">🚌 정류장</div>`;
+    html += stopMatched.map(name => {
+      const routes = [...new Set((stopIndex[name]||[]).map(r=>r.sachin))];
+      const dots   = routes.map(r=>`<span style="color:${COLORS[r]||'#999'}">●</span>`).join(' ');
+      return `<div class="stop-result-item" onclick="selectStop('${name.replace(/'/g,"\\'")}')">
+        <div class="stop-result-name">${name}</div>
+        <div class="stop-result-routes">${dots} ${routes.join(', ')}</div>
+      </div>`;
+    }).join('');
+  }
 
-  results.innerHTML = matched.map(name => {
-    const routes = [...new Set((stopIndex[name]||[]).map(r=>r.sachin))];
-    const dots   = routes.map(r=>`<span style="color:${COLORS[r]||'#999'}">●</span>`).join(' ');
-    return `<div class="stop-result-item" onclick="selectStop('${name.replace(/'/g,"\\'")}')">
-      <div class="stop-result-name">${name}</div>
-      <div class="stop-result-routes">${dots} ${routes.join(', ')}</div>
-    </div>`;
-  }).join('');
+  // 주소 검색 (카카오 장소 검색, 300ms 디바운스)
+  if (val.length >= 2) {
+    html += `<div id="addr-results" style="padding:4px 8px;font-size:10px;color:#888;background:#f5f7fa">🏠 주소 검색 중…</div>`;
+    searchTimer = setTimeout(() => {
+      const ps = new kakao.maps.services.Places();
+      ps.keywordSearch(val, function(data, status) {
+        const addrEl = document.getElementById('addr-results');
+        if (!addrEl) return;
+        if (status === kakao.maps.services.Status.OK && data.length) {
+          let addrHtml = `<div style="padding:4px 8px;font-size:10px;color:#888;background:#f5f7fa">🏠 주소</div>`;
+          addrHtml += data.slice(0,5).map(p => `
+            <div class="stop-result-item" onclick="moveToAddress(${p.y},${p.x},'${p.place_name.replace(/'/g,"\\'")}')">
+              <div class="stop-result-name">${p.place_name}</div>
+              <div class="stop-result-routes" style="color:#888">${p.road_address_name||p.address_name||''}</div>
+            </div>`).join('');
+          addrEl.outerHTML = addrHtml;
+        } else {
+          addrEl.outerHTML = '';
+        }
+      }, { size: 5 });
+    }, 300);
+  }
+
+  results.innerHTML = html || '<div style="padding:8px;font-size:12px;color:#aaa;text-align:center">검색 결과 없음</div>';
   results.style.display = 'block';
+}
+
+function moveToAddress(lat, lng, name) {
+  clearStopSearch();
+  const pos = new kakao.maps.LatLng(lat, lng);
+  kakaoMap.setCenter(pos);
+  kakaoMap.setLevel(3);
+  clearTempPins();
+  searchPin = new kakao.maps.Marker({ position: pos, map: kakaoMap });
+  const iw = new kakao.maps.InfoWindow({
+    content: `<div style="padding:6px 10px;font-size:12px;font-weight:700">${name}</div>`,
+    removable: true
+  });
+  if (iwOpen) iwOpen.close();
+  iw.open(kakaoMap, searchPin);
+  iwOpen = iw;
+  showToast(name);
 }
 
 function clearStopSearch() {
@@ -588,9 +650,10 @@ function selectStop(name) {
     removable:true
   });
 
-  const marker = new kakao.maps.Marker({ position:pos, map:kakaoMap });
+  clearTempPins();
+  searchPin = new kakao.maps.Marker({ position:pos, map:kakaoMap });
   if(iwOpen) iwOpen.close();
-  iw.open(kakaoMap, marker);
+  iw.open(kakaoMap, searchPin);
   iwOpen = iw;
 }
 
@@ -614,22 +677,22 @@ function goToTimetable(sachin) {
 
 // ── 우클릭 컨텍스트 메뉴 ──
 let ctxLat = 0, ctxLng = 0, ctxAddress = '';
+let nearStopMarker = null; // 주변정류장 핀 (토글용)
 
 function showContextMenu(lat, lng, px, py) {
   ctxLat = lat; ctxLng = lng; ctxAddress = '';
   const menu = document.getElementById('ctx-menu');
-  document.getElementById('ctx-coord').textContent =
-    `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  document.getElementById('ctx-address').textContent = '주소 조회 중…';
+  document.getElementById('ctx-coord').textContent = `${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+  document.getElementById('ctx-coord-wrap').style.display = 'none';
 
-  // 화면 경계 처리
-  const mw=180, mh=200;
+  const mw=200, mh=230;
   const x = (px + mw > window.innerWidth)  ? px - mw : px;
   const y = (py + mh > window.innerHeight) ? py - mh : py;
   menu.style.left = x + 'px';
   menu.style.top  = y + 'px';
   menu.style.display = 'block';
 
-  // 주소 역지오코딩 (카카오 서비스)
   const geocoder = new kakao.maps.services.Geocoder();
   geocoder.coord2Address(lng, lat, function(result, status) {
     if (status === kakao.maps.services.Status.OK) {
@@ -637,10 +700,16 @@ function showContextMenu(lat, lng, px, py) {
       ctxAddress = addr.road_address
         ? addr.road_address.address_name
         : addr.address.address_name;
-      document.getElementById('ctx-coord').textContent =
-        `${ctxAddress}\n${lat.toFixed(6)}, ${lng.toFixed(6)}`;
+      document.getElementById('ctx-address').textContent = ctxAddress;
+    } else {
+      document.getElementById('ctx-address').textContent = '주소 없음';
     }
   });
+}
+
+function toggleCtxCoord() {
+  const wrap = document.getElementById('ctx-coord-wrap');
+  wrap.style.display = wrap.style.display === 'none' ? 'block' : 'none';
 }
 
 function hideContextMenu() {
@@ -654,7 +723,7 @@ function ctxCopyCoord() {
 }
 
 function ctxCopyAddress() {
-  if (!ctxAddress) { showToast('주소 로딩 중…'); return; }
+  if (!ctxAddress) { showToast('주소 조회 중입니다. 잠시 후 다시 시도해주세요.'); return; }
   navigator.clipboard.writeText(ctxAddress);
   showToast('주소가 복사됐습니다.');
   hideContextMenu();
@@ -668,7 +737,15 @@ function ctxOpenKakao() {
 function ctxFindNearStop() {
   hideContextMenu();
   if (!stopIndex) return;
-  // 반경 300m 이내 정류장 탐색
+
+  // 이미 표시 중이면 닫기 (토글)
+  if (nearStopMarker) {
+    if (iwOpen) iwOpen.close();
+    nearStopMarker.setMap(null);
+    nearStopMarker = null;
+    return;
+  }
+
   const found = [];
   const seen  = new Set();
   for (const [name, entries] of Object.entries(stopIndex)) {
@@ -683,12 +760,15 @@ function ctxFindNearStop() {
   if (!found.length) { showToast('300m 이내 정류장 없음'); return; }
 
   let html = `<div style="padding:10px 14px;min-width:200px;max-width:280px">
-    <div style="font-weight:700;color:#1a56a0;margin-bottom:8px;font-size:13px">
-      🚌 주변 정류장 (${found.length}개)</div>`;
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+      <span style="font-weight:700;color:#1a56a0;font-size:13px">🚌 주변 정류장 (${found.length}개)</span>
+      <span onclick="closeNearStop()" style="cursor:pointer;color:#aaa;font-size:16px;padding:0 4px">✕</span>
+    </div>`;
   found.slice(0,8).forEach(f => {
     const routes = [...new Set(f.entries.map(x=>x.sachin))];
     const dots   = routes.map(r=>`<span style="color:${COLORS[r]||'#999'}">●</span>`).join('');
-    html += `<div style="margin-bottom:6px;font-size:12px">
+    html += `<div style="margin-bottom:7px;font-size:12px;cursor:pointer"
+      onclick="selectStop('${f.name.replace(/'/g,"\\'")}')">
       <b>${f.name}</b> <span style="color:#888;font-size:10px">${Math.round(f.d)}m</span><br>
       <span style="font-size:11px">${dots} ${routes.join(', ')}</span>
     </div>`;
@@ -696,10 +776,17 @@ function ctxFindNearStop() {
   html += '</div>';
 
   const pos = new kakao.maps.LatLng(ctxLat, ctxLng);
-  const iw  = new kakao.maps.InfoWindow({ content: html, removable: true });
+  if (searchPin) { searchPin.setMap(null); searchPin = null; }
+  nearStopMarker = new kakao.maps.Marker({ position: pos, map: kakaoMap });
+  const iw = new kakao.maps.InfoWindow({ content: html, removable: false });
   if (iwOpen) iwOpen.close();
-  iw.open(kakaoMap, new kakao.maps.Marker({ position: pos, map: kakaoMap }));
+  iw.open(kakaoMap, nearStopMarker);
   iwOpen = iw;
+}
+
+function closeNearStop() {
+  if (iwOpen) iwOpen.close();
+  if (nearStopMarker) { nearStopMarker.setMap(null); nearStopMarker = null; }
 }
 
 function haversineSimple(lat1,lng1,lat2,lng2){
