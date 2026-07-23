@@ -404,12 +404,15 @@ function showVariant(sachin, vname) {
   const segList = content.segs || [content.path];
 
   if (segList.length > 1) {
-    // 다중 세그먼트(왕편·복편 별도 궤적): 전체 동일 색 실선
-    segList.forEach(seg => {
+    // 다중 세그먼트(왕편·복편 별도 궤적): 첫 세그 원색 실선, 이후 어두운 점선
+    segList.forEach((seg, si) => {
       const line = new kakao.maps.Polyline({
         path: seg.map(c=>new kakao.maps.LatLng(c[0],c[1])),
-        strokeWeight:5, strokeColor:upColor, strokeOpacity:0.85,
-        strokeStyle:'solid', map:kakaoMap
+        strokeWeight:5,
+        strokeColor: si===0 ? upColor : downColor,
+        strokeOpacity:0.85,
+        strokeStyle: si===0 ? 'solid' : 'shortdash',
+        map:kakaoMap
       });
       overlays[key].polylines.push(line);
     });
@@ -480,14 +483,19 @@ function showVariant(sachin, vname) {
 
     const iw = new kakao.maps.InfoWindow({ content:iwContent, removable:true });
 
-    // 모든 정류장을 클릭 가능한 점으로 통일 (기점·종점은 약간 크게, 파란 기본마커 제거)
+    // 모든 정류장을 클릭 가능한 점으로 통일 (기점·종점은 약간 크게)
+    // 상행: 색 채움 원 / 하행: 흰 채움 + 색 테두리 링
     const dotSize = isTerminal ? 15 : 11;
+    const isDown = s.dir === '하행';
+    const dotStyle = isDown
+      ? `width:${dotSize}px;height:${dotSize}px;border-radius:50%;background:#fff;border:3px solid ${baseColor};box-shadow:0 1px 3px rgba(0,0,0,0.45)`
+      : `width:${dotSize}px;height:${dotSize}px;border-radius:50%;background:${baseColor};border:${isTerminal?3:2}px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.45)`;
     const stopId = __stopRegistry.length;
     __stopRegistry.push({ iw, pos });
     const dot = new kakao.maps.CustomOverlay({
       position:pos, zIndex: isTerminal ? 5 : 4, xAnchor:0.5, yAnchor:0.5,
       content:`<div onclick="__stopClick(${stopId})" style="width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer">
-        <div style="width:${dotSize}px;height:${dotSize}px;border-radius:50%;background:${dotColor};border:${isTerminal?3:2}px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,0.45)"></div>
+        <div style="${dotStyle}"></div>
       </div>`
     });
     dot.setMap(kakaoMap);
