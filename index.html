@@ -44,9 +44,10 @@
     .group-header .route-label { font-weight: 700; }
     .group-arrow { font-size: 10px; color: #888; margin-left: auto; }
     .variant-list { padding-left: 20px; display: none; } .variant-list.open { display: block; }
-    .variant-row { display: flex; align-items: center; gap: 6px; padding: 3px 2px; cursor: pointer; }
-    .variant-row input { width: 13px; height: 13px; cursor: pointer; }
+    .variant-row { display: flex; align-items: flex-start; gap: 6px; padding: 3px 2px; cursor: pointer; }
+    .variant-row input { width: 13px; height: 13px; cursor: pointer; margin-top: 2px; flex: 0 0 auto; }
     .variant-label { font-size: 11px; color: #555; cursor: pointer; }
+    .variant-note { display: block; font-size: 10px; color: #b06a00; background: #fff6e5; border-left: 2px solid #f0a500; padding: 1px 5px; margin-top: 2px; border-radius: 2px; line-height: 1.35; }
     .map-btn-row { display: flex; gap: 5px; margin-top: 8px; }
     .map-btn { flex: 1; padding: 5px 0; font-size: 11px; border: 1px solid #ccc; border-radius: 4px; background: #f5f5f5; cursor: pointer; }
     .map-btn:hover { background: #e8eef8; border-color: #1a56a0; color: #1a56a0; }
@@ -126,7 +127,7 @@
 </div>
 <script>
 const COLORS={'시내순환3번':'#e53935','시내순환3-1번':'#ef6c00','시내순환4번':'#c62828','시내순환4-1번':'#e91e63','혁신순환16번':'#1a56a0','혁신순환16-1번':'#1565c0','혁신지선13번':'#0d47a1','귀래31·34 매지리':'#2e7d32','신림(21~25번대)':'#f57c00','연대30번':'#6a1b9a','한라대90번':'#7b1fa2','100-2번 기업도시':'#00838f','성문사81번':'#4e342e','82번':'#795548','서곡32번':'#00695c','50번(한정면허)':'#ad1457'};
-const DATA_VER='20260727-v9';
+const DATA_VER='20260727-v10';
 let busData=null,routePaths=null,routeTimes=null,stopIndex=null,kakaoMap=null,overlays={},iwOpen=null;
 window.onload=async function(){
   kakao.maps.load(function(){
@@ -157,7 +158,8 @@ function buildCheckList(){
       varNames.forEach(vname=>{
         const vrow=document.createElement('div');vrow.className='variant-row';
         const uid='chk_'+(sachin+vname).replace(/[^a-zA-Z0-9가-힣]/g,'_');
-        vrow.innerHTML=`<input type="checkbox" id="${uid}" data-sachin="${sachin}" data-var="${vname}" onchange="onCheck(this)"><label class="variant-label" for="${uid}">${vname}</label>`;
+        const note=variants[vname]?.note;
+        vrow.innerHTML=`<input type="checkbox" id="${uid}" data-sachin="${sachin}" data-var="${vname}" onchange="onCheck(this)"><label class="variant-label" for="${uid}" style="flex:1">${vname}${note?`<span class="variant-note">${note}</span>`:''}</label>`;
         vlist.appendChild(vrow);
       });
       wrap.appendChild(header);wrap.appendChild(vlist);
