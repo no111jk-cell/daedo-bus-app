@@ -127,7 +127,7 @@
 </div>
 <script>
 const COLORS={'시내순환3번':'#e53935','시내순환3-1번':'#ef6c00','시내순환4번':'#c62828','시내순환4-1번':'#e91e63','혁신순환16번':'#1a56a0','혁신순환16-1번':'#1565c0','혁신지선13번':'#0d47a1','귀래31·34 매지리':'#2e7d32','신림(21~25번대)':'#f57c00','연대30번':'#6a1b9a','한라대90번':'#7b1fa2','100-2번 기업도시':'#00838f','성문사81번':'#4e342e','82번':'#795548','서곡32번':'#00695c','50번(한정면허)':'#ad1457'};
-const DATA_VER='20260727-v20';
+const DATA_VER='20260727-v21';
 let busData=null,routePaths=null,routeTimes=null,stopIndex=null,kakaoMap=null,overlays={},iwOpen=null;
 window.onload=async function(){
   kakao.maps.load(function(){
@@ -179,7 +179,7 @@ function showVariant(sachin,vname){
     overlays[key].polylines.push(line);
   }else{
     const splitStop=content.stops[dirChangeIdx[0]];
-    let splitIdx=content.path.findIndex(p=>Math.abs(p[0]-splitStop.lat)<0.0015&&Math.abs(p[1]-splitStop.lng)<0.0015);
+    let splitIdx=(typeof content.splitIdx==='number')?content.splitIdx:content.path.findIndex(p=>Math.abs(p[0]-splitStop.lat)<0.0015&&Math.abs(p[1]-splitStop.lng)<0.0015);
     if(splitIdx<=0)splitIdx=Math.floor(content.path.length/2);
     const upPath=content.path.slice(0,splitIdx+1);const downPath=content.path.slice(splitIdx);
     const line1=new kakao.maps.Polyline({path:upPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),strokeWeight:5,strokeColor:upColor,strokeOpacity:0.85,strokeStyle:'solid',map:kakaoMap});
