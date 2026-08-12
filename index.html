@@ -66,6 +66,15 @@
     .pick-iw .pk-near { font-size: 11px; color: #555; line-height: 1.45; }
     .pick-iw .pk-dist { font-weight: 700; color: #c62828; }
     .pick-iw .pk-muted { color: #aaa; }
+    .pick-iw { max-width: 340px; }
+    .pick-iw .pk-cand { border: 1px solid #e6e6e6; border-radius: 5px; padding: 4px 6px; margin: 3px 0; background: #fafbfc; }
+    .pick-iw .pk-cand.top { border-color: #1a56a0; background: #f2f7fd; }
+    .pick-iw .pk-cand[onclick] { cursor: pointer; }
+    .pick-iw .pk-cand[onclick]:hover { background: #e8eef8; }
+    .pick-iw .pk-cand-h { display: flex; justify-content: space-between; gap: 6px; align-items: baseline; font-size: 11.5px; color: #222; }
+    .pick-iw .pk-cand-m { font-size: 10px; color: #777; margin-top: 1px; }
+    .pick-iw .pk-btn-row { flex-wrap: wrap; }
+    .pick-iw .pk-btn { flex: 1 1 46%; }
     .pick-iw .pk-btn-row { display: flex; gap: 5px; margin-top: 9px; }
     .pick-iw .pk-btn { flex: 1; padding: 5px 0; font-size: 11px; border: 1px solid #1a56a0; border-radius: 4px; background: #fff; color: #1a56a0; cursor: pointer; }
     .pick-iw .pk-btn.primary { background: #1a56a0; color: #fff; }
@@ -123,7 +132,8 @@
       <button class="map-btn" onclick="selectAll()">전체 선택</button>
       <button class="map-btn" onclick="clearAll()">전체 해제</button>
     </div>
-    <label class="pick-toggle" title="지도 빈 곳을 클릭하면 그 지점의 좌표·주소·최근접 정류장을 보여줍니다."><input type="checkbox" id="pick-toggle" checked> 📍 클릭한 위치 정보 보기</label>
+    <label class="pick-toggle" title="폴리라인 위에 진행 방향 화살표를 표시합니다. 상행은 실선색, 하행은 짙은색으로 구분됩니다."><input type="checkbox" id="arrow-toggle" checked onchange="onArrowToggle(this)"> ➤ 진행 방향 표시</label>
+    <label class="pick-toggle" title="지도 빈 곳을 클릭하면 좌표·주소·가까운 정류장 3건·가까운 노선선 3건·주변 정류장 수를 보여줍니다. (우클릭은 이 설정과 무관하게 항상 동작)"><input type="checkbox" id="pick-toggle" checked> 📍 클릭한 위치 정보 보기</label>
   </div>
   <div id="map"></div>
 </div>
@@ -146,7 +156,8 @@
 </div>
 <script>
 const COLORS={'시내순환3번':'#e53935','시내순환3-1번':'#ef6c00','시내순환4번':'#c62828','시내순환4-1번':'#e91e63','혁신순환16번':'#1a56a0','혁신순환16-1번':'#1565c0','혁신지선13번':'#0d47a1','귀래31·34 매지리':'#2e7d32','신림(21~25번대)':'#f57c00','연대30번':'#6a1b9a','한라대90번':'#7b1fa2','100-2번 기업도시':'#00838f','성문사81번':'#4e342e','82번':'#795548','서곡32번':'#00695c','50번(한정면허)':'#ad1457'};
-const DATA_VER='20260805-v26';
+const DATA_VER='20260811-v28';
+let showArrows=true;
 let busData=null,routePaths=null,routeTimes=null,stopIndex=null,kakaoMap=null,overlays={},iwOpen=null;
 let geocoder=null,pickDot=null,pickIW=null,lastPick=null;
 window.onload=async function(){
@@ -189,6 +200,53 @@ function buildCheckList(){
   }
 }
 function onCheck(chk){chk.checked?showVariant(chk.dataset.sachin,chk.dataset.var):hideVariant(chk.dataset.sachin,chk.dataset.var);}
+/* ===== 진행 방향 화살표 =====
+   폴리라인 경로를 일정 간격으로 훑어 방위각대로 회전한 화살표를 CustomOverlay 로 얹음.
+   Kakao·Leaflet 양쪽에서 동일하게 동작함(둘 다 CustomOverlay 를 지원). */
+const ARROW_SPACING=700;   // 화살표 간 목표 간격(m)
+const ARROW_MAX=40;        // 폴리라인 1본당 최대 개수
+function _bearing(a,b){    // 정북 기준 시계방향 각도
+  return Math.atan2((b[1]-a[1])*88554.0,(b[0]-a[0])*110540.0)*180/Math.PI;
+}
+function _arrowSvg(color,deg){
+  return '<div style="transform:rotate('+deg.toFixed(1)+'deg);line-height:0">'
+    +'<svg width="15" height="15" viewBox="0 0 16 16" style="display:block">'
+    +'<path d="M8 1.2 L13.8 14 L8 10.7 L2.2 14 Z" fill="'+color+'" stroke="#fff" '
+    +'stroke-width="1.3" stroke-linejoin="round"/></svg></div>';
+}
+/* path(배열) 위에 화살표 오버레이를 만들어 반환함 */
+function makeDirArrows(path,color){
+  const out=[];
+  if(!showArrows||!path||path.length<2)return out;
+  let total=0;
+  for(let i=0;i<path.length-1;i++)
+    total+=Math.sqrt(Math.pow((path[i+1][0]-path[i][0])*110540.0,2)+Math.pow((path[i+1][1]-path[i][1])*88554.0,2));
+  if(total<200)return out;
+  const step=Math.max(ARROW_SPACING,total/ARROW_MAX);
+  let acc=0,next=Math.min(step*0.5,600);
+  for(let i=0;i<path.length-1;i++){
+    const seg=Math.sqrt(Math.pow((path[i+1][0]-path[i][0])*110540.0,2)+Math.pow((path[i+1][1]-path[i][1])*88554.0,2));
+    if(seg<=0)continue;
+    while(acc+seg>=next&&out.length<ARROW_MAX){
+      const t=(next-acc)/seg;
+      const lat=path[i][0]+(path[i+1][0]-path[i][0])*t;
+      const lng=path[i][1]+(path[i+1][1]-path[i][1])*t;
+      const ov=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(lat,lng),
+        zIndex:4,xAnchor:0.5,yAnchor:0.5,content:_arrowSvg(color,_bearing(path[i],path[i+1]))});
+      ov.setMap(kakaoMap);out.push(ov);
+      next+=step;
+    }
+    acc+=seg;
+  }
+  return out;
+}
+function onArrowToggle(el){
+  showArrows=el.checked;
+  const keys=Object.keys(overlays).map(k=>{const p=k.indexOf('||');return[k.slice(0,p),k.slice(p+2)];});
+  keys.forEach(([s,v])=>hideVariant(s,v));
+  keys.forEach(([s,v])=>showVariant(s,v));
+  toast(showArrows?'진행 방향 화살표 켬':'진행 방향 화살표 끔');
+}
 function showVariant(sachin,vname){
   const key=sachin+'||'+vname;if(overlays[key])return;
   const content=routePaths[sachin]?.[vname];if(!content)return;
@@ -199,6 +257,7 @@ function showVariant(sachin,vname){
   if(dirChangeIdx.length===0){
     const line=new kakao.maps.Polyline({path:content.path.map(c=>new kakao.maps.LatLng(c[0],c[1])),strokeWeight:5,strokeColor:upColor,strokeOpacity:0.82,strokeStyle:'solid',map:kakaoMap});
     overlays[key].polylines.push(line);
+    makeDirArrows(content.path,upColor).forEach(a=>overlays[key].customs.push(a));
   }else{
     const splitStop=content.stops[dirChangeIdx[0]];
     let splitIdx=(typeof content.splitIdx==='number')?content.splitIdx:content.path.findIndex(p=>Math.abs(p[0]-splitStop.lat)<0.0015&&Math.abs(p[1]-splitStop.lng)<0.0015);
@@ -207,6 +266,8 @@ function showVariant(sachin,vname){
     const line1=new kakao.maps.Polyline({path:upPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),strokeWeight:5,strokeColor:upColor,strokeOpacity:0.85,strokeStyle:'solid',map:kakaoMap});
     const line2=new kakao.maps.Polyline({path:downPath.map(c=>new kakao.maps.LatLng(c[0],c[1])),strokeWeight:5,strokeColor:downColor,strokeOpacity:0.85,strokeStyle:'shortdash',map:kakaoMap});
     overlays[key].polylines.push(line1,line2);
+    makeDirArrows(upPath,upColor).forEach(a=>overlays[key].customs.push(a));
+    makeDirArrows(downPath,downColor).forEach(a=>overlays[key].customs.push(a));
   }
   content.stops.forEach((s,i)=>{
     if(!s.lat||!s.lng)return;
@@ -230,51 +291,200 @@ function showVariant(sachin,vname){
   });
   fitBoundsAll();
 }
-/* ===== 지도 클릭 위치 정보 ===== */
+/* ===== 지도 클릭 위치 정보 (v27) =====
+   ── 구조 안내 ──────────────────────────────────────────────────────────
+   표시 항목은 아래 PICK_SECTIONS 배열 하나로만 관리됨.
+   항목을 추가할 때는 파일 다른 곳을 건드리지 말고 배열에 객체 하나만 넣으면 됨.
+
+     PICK_SECTIONS.push({
+       id:    'myitem',                       // 고유 id
+       order: 60,                             // 표시 순서(작은 값 우선)
+       render: function(c){ return _pkRow('제목', '내용'); },  // 팝업 HTML
+       copy:   function(c){ return '제목: 내용'; }             // '전체 복사'에 포함될 줄
+     });
+
+   render / copy 에 넘어오는 c(컨텍스트) 필드
+     c.lat, c.lng   클릭 지점 좌표(WGS84)
+     c.addr         카카오 coord2Address 결과(없으면 null)
+     c.pending      주소 조회 진행 중이면 true
+     c.stops        최근접 정류장 후보 [{name, e, d, groups[]}] (거리순, 최대 PICK_TOPN)
+     c.lines        최근접 노선선 후보 [{sachin, vname, d}] (거리순, 최대 PICK_TOPN)
+     c.lineScope    'shown' = 화면 표시 중 노선 기준 / 'all' = 전 노선 스캔
+     c.within       반경 PICK_RADIUS m 내 정류장(고유명) 수
+   copy 가 빈 문자열을 반환하면 그 줄은 생략됨.
+   ─────────────────────────────────────────────────────────────────────── */
 const _MY=110540.0,_MX=88554.0;
+const PICK_TOPN=3;        // 최근접 후보 표시 개수
+const PICK_RADIUS=300;    // 주변 정류장 집계 반경(m)
+
 function _mdist(aLat,aLng,bLat,bLng){const dy=(aLat-bLat)*_MY,dx=(aLng-bLng)*_MX;return Math.sqrt(dy*dy+dx*dx);}
 function _dSeg(lat,lng,a,b){const y=lat*_MY,x=lng*_MX,ay=a[0]*_MY,ax=a[1]*_MX,by=b[0]*_MY,bx=b[1]*_MX;const dy=by-ay,dx=bx-ax,L=dy*dy+dx*dx;let t=(L===0)?0:((y-ay)*dy+(x-ax)*dx)/L;if(t<0)t=0;if(t>1)t=1;const py=ay+t*dy,px=ax+t*dx;return Math.sqrt((y-py)*(y-py)+(x-px)*(x-px));}
 function _fmtM(d){return d<1000?Math.round(d)+' m':(d/1000).toFixed(2)+' km';}
-function _nearestStop(lat,lng){if(!stopIndex)return null;let best=null;for(const name in stopIndex){const arr=stopIndex[name];for(let i=0;i<arr.length;i++){const e=arr[i];if(!e.lat||!e.lng)continue;const d=_mdist(lat,lng,e.lat,e.lng);if(!best||d<best.d)best={d:d,name:name,e:e};}}return best;}
-function _nearestLine(lat,lng){if(!routePaths)return null;let best=null;for(const key in overlays){const p=key.indexOf('||');if(p<0)continue;const sachin=key.slice(0,p),vname=key.slice(p+2);const c=routePaths[sachin]&&routePaths[sachin][vname];if(!c||!c.path||c.path.length<2)continue;const path=c.path;for(let i=0;i<path.length-1;i++){const d=_dSeg(lat,lng,path[i],path[i+1]);if(!best||d<best.d)best={d:d,sachin:sachin,vname:vname};}}return best;}
-function closePick(){if(pickDot){pickDot.setMap(null);pickDot=null;}if(pickIW){if(iwOpen===pickIW)iwOpen=null;pickIW.close();pickIW=null;}}
-function closeAllIW(){closePick();if(iwOpen){iwOpen.close();iwOpen=null;}}
+function _esc(s){return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');}
+function _pkRow(k,v,cls){return '<div class="pk-row"><div class="pk-k">'+k+'</div><div class="pk-v'+(cls?' '+cls:'')+'">'+v+'</div></div>';}
+function _pkDot(sachin){return '<span style="color:'+(COLORS[sachin]||'#333')+'">●</span>';}
+
+/* 최근접 정류장 — 정류장명 기준으로 묶어 최소거리 1건씩, 거리순 상위 n건 */
+function _nearestStops(lat,lng,n){
+  if(!stopIndex)return[];
+  const out=[];
+  for(const name in stopIndex){
+    const arr=stopIndex[name];let best=null;const gs={};
+    for(let i=0;i<arr.length;i++){
+      const e=arr[i];if(!e.lat||!e.lng)continue;
+      gs[e.sachin]=1;
+      const d=_mdist(lat,lng,e.lat,e.lng);
+      if(!best||d<best.d)best={d:d,name:name,e:e};
+    }
+    if(best){best.groups=Object.keys(gs);out.push(best);}
+  }
+  out.sort((a,b)=>a.d-b.d);
+  return out.slice(0,n||1);
+}
+/* 반경 r m 내 정류장(고유명) 수 */
+function _countWithin(lat,lng,r){
+  if(!stopIndex)return 0;let c=0;
+  for(const name in stopIndex){
+    const arr=stopIndex[name];
+    for(let i=0;i<arr.length;i++){
+      const e=arr[i];
+      if(e.lat&&e.lng&&_mdist(lat,lng,e.lat,e.lng)<=r){c++;break;}
+    }
+  }
+  return c;
+}
+/* 최근접 노선선 — 화면 표시 중 노선 우선, 없으면 전 노선 스캔 */
+function _nearestLines(lat,lng,n){
+  if(!routePaths)return{scope:'shown',list:[]};
+  let keys=Object.keys(overlays),scope='shown';
+  if(!keys.length){
+    keys=[];scope='all';
+    for(const s in routePaths)for(const v in routePaths[s])keys.push(s+'||'+v);
+  }
+  const out=[];
+  for(let k=0;k<keys.length;k++){
+    const p=keys[k].indexOf('||');if(p<0)continue;
+    const sachin=keys[k].slice(0,p),vname=keys[k].slice(p+2);
+    const c=routePaths[sachin]&&routePaths[sachin][vname];
+    if(!c||!c.path||c.path.length<2)continue;
+    const path=c.path;let best=Infinity;
+    for(let i=0;i<path.length-1;i++){const d=_dSeg(lat,lng,path[i],path[i+1]);if(d<best)best=d;}
+    out.push({sachin:sachin,vname:vname,d:best});
+  }
+  out.sort((a,b)=>a.d-b.d);
+  return{scope:scope,list:out.slice(0,n||1)};
+}
+
+/* ── 표시 항목 정의 ─────────────────────────────────────────────────── */
+const PICK_SECTIONS=[
+  { id:'coord', order:10,
+    render:function(c){return _pkRow('좌표',_esc(c.lat.toFixed(6)+', '+c.lng.toFixed(6)),'pk-coord');},
+    copy:function(c){return '좌표: '+c.lat.toFixed(6)+', '+c.lng.toFixed(6);} },
+
+  { id:'addr', order:20,
+    render:function(c){
+      if(c.pending)return _pkRow('주소','<span class="pk-muted">조회 중…</span>');
+      const a=c.addr||{};
+      const road=(a.road_address&&a.road_address.address_name)||'';
+      const jibun=(a.address&&a.address.address_name)||'';
+      const zone=(a.road_address&&a.road_address.zone_no)||'';
+      return _pkRow('도로명',road?_esc(road)+(zone?' <span class="pk-muted">('+_esc(zone)+')</span>':''):'<span class="pk-muted">도로명주소 없음</span>')
+           + _pkRow('지번',jibun?_esc(jibun):'<span class="pk-muted">지번주소 없음</span>');
+    },
+    copy:function(c){
+      const a=c.addr||{};const L=[];
+      const road=(a.road_address&&a.road_address.address_name)||'';
+      const jibun=(a.address&&a.address.address_name)||'';
+      if(road)L.push('도로명: '+road);
+      if(jibun)L.push('지번: '+jibun);
+      return L.join('\n');
+    } },
+
+  { id:'stops', order:30,
+    render:function(c){
+      if(!c.stops.length)return _pkRow('가까운<br>정류장','<span class="pk-muted">정류장 정보 없음</span>','pk-near');
+      let h='';
+      c.stops.forEach(function(s,i){
+        const meta=[s.e.dir||'',(s.e.seq!=null?'seq '+s.e.seq:'')].filter(Boolean).join(' · ');
+        const gs=s.groups.map(function(g){return _pkDot(g)+' '+_esc(g);}).join(' ');
+        h+='<div class="pk-cand'+(i===0?' top':'')+'" onclick="pickGoStop(\''+_esc(s.name).replace(/'/g,'&#39;')+'\')" title="클릭하면 이 정류장으로 이동함">'
+          +'<div class="pk-cand-h"><b>'+_esc(s.name)+'</b><span class="pk-dist">'+_fmtM(s.d)+'</span></div>'
+          +'<div class="pk-cand-m">'+gs+(meta?' <span class="pk-muted">'+meta+'</span>':'')+'</div></div>';
+      });
+      return _pkRow('가까운<br>정류장',h,'pk-near');
+    },
+    copy:function(c){
+      if(!c.stops.length)return '';
+      return '가까운 정류장:\n'+c.stops.map(function(s){
+        return '  · '+s.name+' '+_fmtM(s.d)+' ('+s.groups.join(', ')+(s.e.seq!=null?' / '+(s.e.dir||'')+' seq '+s.e.seq:'')+')';
+      }).join('\n');
+    } },
+
+  { id:'lines', order:40,
+    render:function(c){
+      if(!c.lines.length)return _pkRow('가까운<br>노선선','<span class="pk-muted">노선 데이터 없음</span>','pk-near');
+      let h='';
+      c.lines.forEach(function(l){
+        h+='<div class="pk-cand"><div class="pk-cand-h">'+_pkDot(l.sachin)+' '+_esc(l.vname)+'<span class="pk-dist">'+_fmtM(l.d)+'</span></div></div>';
+      });
+      if(c.lineScope==='all')h+='<div class="pk-muted" style="font-size:10px;margin-top:2px">※ 표시된 노선이 없어 전 노선을 대상으로 계산함</div>';
+      return _pkRow('가까운<br>노선선',h,'pk-near');
+    },
+    copy:function(c){
+      if(!c.lines.length)return '';
+      return '가까운 노선선'+(c.lineScope==='all'?'(전 노선)':'(표시 중)')+':\n'
+        +c.lines.map(function(l){return '  · '+l.vname+' '+_fmtM(l.d);}).join('\n');
+    } },
+
+  { id:'area', order:50,
+    render:function(c){return _pkRow('주변','반경 '+PICK_RADIUS+' m 내 정류장 <b>'+c.within+'</b>개','pk-near');},
+    copy:function(c){return '반경 '+PICK_RADIUS+' m 내 정류장: '+c.within+'개';} }
+
+  /* ── 추후 추가 예정 항목(요청 시 주석 해제·수정하여 사용) ──────────────
+  ,{ id:'stopid', order:35,
+     render:function(c){const s=c.stops[0];return s&&s.e.id?_pkRow('정류장ID',_esc(s.e.id)):'';},
+     copy:function(c){const s=c.stops[0];return s&&s.e.id?'정류장ID: '+s.e.id:'';} }
+  ,{ id:'timeinfo', order:45,
+     render:function(c){ // 최근접 정류장 경유 노선의 첫차/막차
+       const s=c.stops[0];if(!s)return'';
+       return s.groups.map(function(g){
+         return (routeTimes[g]||[]).map(function(t){return _pkRow(_esc(g),_esc(t.day+' '+t.first+'~'+t.last));}).join('');
+       }).join('');
+     },
+     copy:function(){return '';} }
+  ────────────────────────────────────────────────────────────────────── */
+];
+
+function _pickCtx(lat,lng,addr,pending){
+  const nl=_nearestLines(lat,lng,PICK_TOPN);
+  return{lat:lat,lng:lng,addr:addr,pending:!!pending,
+    stops:_nearestStops(lat,lng,PICK_TOPN),
+    lines:nl.list,lineScope:nl.scope,
+    within:_countWithin(lat,lng,PICK_RADIUS)};
+}
 function _pickHtml(lat,lng,addr,pending){
-  const cs=lat.toFixed(6)+', '+lng.toFixed(6);
-  let road='<span class="pk-muted">조회 중…</span>',jibun='<span class="pk-muted">조회 중…</span>';
-  if(!pending){
-    road=(addr&&addr.road_address&&addr.road_address.address_name)||'<span class="pk-muted">도로명주소 없음</span>';
-    jibun=(addr&&addr.address&&addr.address.address_name)||'<span class="pk-muted">지번주소 없음</span>';
-  }
-  const ns=_nearestStop(lat,lng),nl=_nearestLine(lat,lng);
-  let near='';
-  if(ns){
-    const col=COLORS[ns.e.sachin]||'#333';
-    const meta=[ns.e.dir||'',(ns.e.seq!=null?'seq '+ns.e.seq:'')].filter(Boolean).join(' · ');
-    near+='<div class="pk-row"><div class="pk-k">최근접<br>정류장</div><div class="pk-v pk-near"><b>'+ns.name+'</b>'+(meta?' <span style="font-size:10px;color:#999">'+meta+'</span>':'')+'<br><span style="color:'+col+'">●</span> '+ns.e.sachin+' &nbsp;<span class="pk-dist">'+_fmtM(ns.d)+'</span></div></div>';
-    lastPick&&(lastPick.near=ns.name+' ('+ns.e.sachin+', '+_fmtM(ns.d)+')');
-  }
-  if(nl){
-    near+='<div class="pk-row"><div class="pk-k">최근접<br>노선선</div><div class="pk-v pk-near"><span style="color:'+(COLORS[nl.sachin]||'#333')+'">●</span> '+nl.vname+'<br><span class="pk-dist">'+_fmtM(nl.d)+'</span></div></div>';
-    lastPick&&(lastPick.line=nl.vname+' '+_fmtM(nl.d));
-  }else{
-    near+='<div class="pk-row"><div class="pk-k">최근접<br>노선선</div><div class="pk-v pk-near pk-muted">표시된 노선 없음</div></div>';
-  }
-  return '<div class="pick-iw">'+
-    '<div class="pk-title">📍 클릭 위치 정보</div>'+
-    '<div class="pk-row"><div class="pk-k">좌표</div><div class="pk-v pk-coord">'+cs+'</div></div>'+
-    '<div class="pk-row"><div class="pk-k">도로명</div><div class="pk-v">'+road+'</div></div>'+
-    '<div class="pk-row"><div class="pk-k">지번</div><div class="pk-v">'+jibun+'</div></div>'+
-    '<div class="pk-sep"></div>'+near+
-    '<div class="pk-btn-row">'+
-      '<button class="pk-btn primary" onclick="copyPick(\'coord\')">좌표 복사</button>'+
-      '<button class="pk-btn" onclick="copyPick(\'all\')">전체 복사</button>'+
-      '<button class="pk-btn ghost" onclick="closePick()">닫기</button>'+
-    '</div></div>';
+  const c=_pickCtx(lat,lng,addr,pending);
+  lastPick=c;
+  const secs=PICK_SECTIONS.slice().sort(function(a,b){return(a.order||0)-(b.order||0);});
+  let body='',prevOrder=null;
+  secs.forEach(function(s){
+    let h='';
+    try{h=s.render(c)||'';}catch(e){h='';}
+    if(!h)return;
+    if(prevOrder!==null&&prevOrder<30&&(s.order||0)>=30)body+='<div class="pk-sep"></div>';
+    body+=h;prevOrder=s.order||0;
+  });
+  return '<div class="pick-iw">'
+    +'<div class="pk-title">📍 클릭 위치 정보</div>'+body
+    +'<div class="pk-btn-row">'
+      +'<button class="pk-btn primary" onclick="copyPick(\'coord\')">좌표 복사</button>'
+      +'<button class="pk-btn" onclick="copyPick(\'all\')">전체 복사</button>'
+      +'<button class="pk-btn" onclick="pickOpenKakao()">카카오맵</button>'
+      +'<button class="pk-btn ghost" onclick="closePick()">닫기</button>'
+    +'</div></div>';
 }
 function showPickInfo(latlng){
   const lat=latlng.getLat(),lng=latlng.getLng();
-  lastPick={lat:lat,lng:lng,road:'',jibun:'',near:'',line:''};
   pickDot=new kakao.maps.CustomOverlay({position:latlng,zIndex:8,xAnchor:0.5,yAnchor:0.5,content:'<div style="width:15px;height:15px;border-radius:50%;background:#e53935;border:3px solid #fff;box-shadow:0 1px 5px rgba(0,0,0,0.55)"></div>'});
   pickDot.setMap(kakaoMap);
   const iw=new kakao.maps.InfoWindow({position:latlng,content:_pickHtml(lat,lng,null,true),removable:true,zIndex:9});
@@ -284,28 +494,35 @@ function showPickInfo(latlng){
   geocoder.coord2Address(lng,lat,function(res,status){
     let addr=null;
     if(status===kakao.maps.services.Status.OK&&res&&res.length)addr=res[0];
-    if(lastPick&&Math.abs(lastPick.lat-lat)<1e-9){
-      lastPick.road=(addr&&addr.road_address&&addr.road_address.address_name)||'';
-      lastPick.jibun=(addr&&addr.address&&addr.address.address_name)||'';
-    }
     if(pickIW===iw)iw.setContent(_pickHtml(lat,lng,addr,false));
   });
+}
+/* 후보 정류장 클릭 → 해당 정류장으로 이동 */
+function pickGoStop(name){closePick();selectStop(name);}
+/* 클릭 지점을 카카오맵에서 열기 */
+function pickOpenKakao(){
+  if(!lastPick)return;
+  window.open('https://map.kakao.com/link/map/클릭지점,'+lastPick.lat.toFixed(6)+','+lastPick.lng.toFixed(6),'_blank');
 }
 function copyPick(mode){
   if(!lastPick)return;
   let t=lastPick.lat.toFixed(6)+', '+lastPick.lng.toFixed(6);
   if(mode==='all'){
-    const L=['좌표: '+t];
-    if(lastPick.road)L.push('도로명: '+lastPick.road);
-    if(lastPick.jibun)L.push('지번: '+lastPick.jibun);
-    if(lastPick.near)L.push('최근접 정류장: '+lastPick.near);
-    if(lastPick.line)L.push('최근접 노선선: '+lastPick.line);
+    const secs=PICK_SECTIONS.slice().sort(function(a,b){return(a.order||0)-(b.order||0);});
+    const L=[];
+    secs.forEach(function(s){
+      let line='';
+      try{line=(s.copy?s.copy(lastPick):'')||'';}catch(e){line='';}
+      if(line)L.push(line);
+    });
     t=L.join('\n');
   }
-  const ok=()=>toast('복사되었습니다');
-  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,()=>fallbackCopy(t));}
+  const ok=function(){toast('복사되었습니다');};
+  if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(t).then(ok,function(){fallbackCopy(t);});}
   else fallbackCopy(t);
 }
+function closePick(){if(pickDot){pickDot.setMap(null);pickDot=null;}if(pickIW){if(iwOpen===pickIW)iwOpen=null;pickIW.close();pickIW=null;}}
+function closeAllIW(){closePick();if(iwOpen){iwOpen.close();iwOpen=null;}}
 function fallbackCopy(t){const ta=document.createElement('textarea');ta.value=t;ta.style.position='fixed';ta.style.opacity='0';document.body.appendChild(ta);ta.select();try{document.execCommand('copy');toast('복사되었습니다');}catch(e){toast('복사 실패 — 직접 선택해 주세요');}document.body.removeChild(ta);}
 function toast(msg){let el=document.getElementById('mini-toast');if(!el){el=document.createElement('div');el.id='mini-toast';document.body.appendChild(el);}el.textContent=msg;el.className='show';clearTimeout(window.__toastT);window.__toastT=setTimeout(function(){el.className='';},1700);}
 /* ===== /지도 클릭 위치 정보 ===== */
