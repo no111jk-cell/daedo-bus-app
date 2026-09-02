@@ -42,7 +42,9 @@
   .bus .ar{display:inline-block;width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:8px solid #fff;transform-origin:50% 60%}
   .bus.hl{outline:3px solid #ffd600;outline-offset:1px;z-index:99}
   .bus.stale{opacity:.5;border-style:dashed}
-  .stopdot{width:9px;height:9px;border-radius:50%;background:#fff;cursor:pointer;box-shadow:0 0 0 3px rgba(255,255,255,.01)}
+  .stopwrap{width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:50%}
+  .stopwrap:hover .stopdot{transform:scale(1.5)}
+  .stopdot{width:10px;height:10px;border-radius:50%;background:#fff;transition:transform .12s;pointer-events:none}
   .spop{background:#fff;border:1px solid #888;border-radius:9px;padding:9px 11px;font-size:11.5px;line-height:1.55;box-shadow:0 2px 10px rgba(0,0,0,.3);min-width:190px;max-width:250px;position:relative;font-family:inherit;color:#1a1d21}
   .spop h4{font-size:12.5px;margin-bottom:3px;padding-right:14px}
   .spop .x{position:absolute;top:5px;right:8px;cursor:pointer;color:#888;font-weight:700}
@@ -85,6 +87,9 @@
     #panelToggle{display:inline-block}
     #legend{font-size:10px;left:6px;bottom:6px;max-width:80%;line-height:1.5}
     th,td{padding:7px 7px}
+    .stopwrap{width:38px;height:38px}
+    .bus{padding:5px 8px;font-size:12px}
+    .stopdot{width:12px;height:12px}
     #status{min-width:0;flex:1;overflow:hidden}
     #stxt{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
     #hdrToggle{display:inline-block;flex:none;padding:7px 11px}
@@ -343,9 +348,11 @@ async function drawPathExt(){
     // 정류장 점 (전 노선 공통 · 클릭 시 정보)
     if($('showStops').checked){
       st.forEach(p=>{
-        const el=document.createElement('div');el.className='stopdot';el.style.border='2.5px solid '+SLOT_COL[slotI];el.title=p.nm;
-        el.onclick=ev=>{ev.stopPropagation();openStop(p.id);};
-        const ov=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(p.lat,p.lon),content:el,zIndex:2,clickable:true});
+        const w=document.createElement('div');w.className='stopwrap';w.title=p.nm;
+        const el=document.createElement('div');el.className='stopdot';el.style.border='3px solid '+SLOT_COL[slotI];
+        w.appendChild(el);
+        w.onclick=ev=>{ev.stopPropagation();openStop(p.id);};
+        const ov=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(p.lat,p.lon),content:w,zIndex:2,clickable:true});
         ov.setMap(map);stopOvs.push(ov);
       });
     }
