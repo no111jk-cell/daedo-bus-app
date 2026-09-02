@@ -79,6 +79,7 @@
     h1{font-size:14px}
     select,button{padding:8px 9px;font-size:13px}
     .rsel{flex:1 1 100%}.rsel select{flex:1;max-width:100%}
+    #q{flex:1;width:auto!important}
     .tab{padding:11px 2px;font-size:13px}
     #wrap{flex-direction:column}
     #panel{width:100%;height:46%;border-left:none;border-top:1px solid var(--line)}
@@ -110,6 +111,7 @@
     <span class="rsel"><span class="rdot" style="background:#c2185b"></span><select id="r1"><option value="">노선 수집 중...</option></select></span>
     <span class="rsel"><span class="rdot" style="background:#00796b"></span><select id="r2"><option value="">+ 노선 2</option></select></span>
     <span class="rsel"><span class="rdot" style="background:#1565c0"></span><select id="r3"><option value="">+ 노선 3</option></select></span>
+    <span class="rsel" style="flex:0 1 auto"><input type="text" id="q" placeholder="정류장명·차량번호 검색" style="padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;width:150px"><button id="qBtn">🔍</button></span>
     <select id="veh"><option value="">차량 찾기(54대)</option></select>
     <select id="ivl">
       <option value="3">3초</option><option value="5">5초</option><option value="10" selected>10초</option>
@@ -301,7 +303,6 @@ function selGroups(){const out=[];selected().forEach(n=>(NO_GROUP[n]||[]).forEac
 function fmtT(t){t=String(t||'').trim();return /^\d{3,4}$/.test(t)&&t!=='0000'?t.padStart(4,'0').replace(/(\d\d)(\d\d)/,'$1:$2'):'';}
 function drawPath(){
   pathSeq++; clearLines(); stopData={};
-  if(!$('showPath').checked&&!$('showStops').checked) return;
   // 대도 노선: DTG 정밀 경로
   if($('showPath').checked&&paths){
     selected().forEach((no,slot)=>{
@@ -577,6 +578,33 @@ async function vehSearch(){
   else{setLed('warn',v4+'호: 현재 운행 신호 없음 — 차고지 대기·검사·미운행 추정'+(lastSeen[v4]?' (마지막 포착 '+lastSeen[v4].t+' '+lastSeen[v4].nodenm+')':''));map.setLevel(5);map.panTo(new kakao.maps.LatLng(DEPOT.lat,DEPOT.lon));}
 }
 
+/* ===================== 통합 검색 ===================== */
+let qMatches=[],qIdx=-1,qLast='';
+function doSearch(){
+  const q=($('q').value||'').trim();
+  if(!q) return;
+  // 숫자 → 차량 검색
+  if(/^\d{2,4}$/.test(q)){
+    const v4=q.padStart(4,'0').slice(-4);
+    // 화면에 이미 있는 차량(타사 포함)
+    const cur=Object.values(vehMarks).find(e=>e.v4.endsWith(q)||e.v4===v4);
+    if(cur){hlVeh=cur.v4;refreshHighlight();renderAll();map.setLevel(4);map.panTo(new kakao.maps.LatLng(cur.lat,cur.lon));setLed('ok',cur.v4+'호: '+cur.rt+'번 운행 중 | '+(cur.nodenm||''));return;}
+    if(v4 in VEH_GRP){$('veh').value=v4;vehSearch();return;}
+    setLed('warn',q+'호: 현재 선택한 노선에서 포착되지 않음 — 그 차량이 다니는 노선을 선택하면 표시됩니다');
+    return;
+  }
+  // 문자 → 정류장 검색 (선택 노선의 정류장 색인에서)
+  const norm=x=>String(x).replace(/\s+/g,'');
+  const nq=norm(q);
+  if(q!==qLast){qMatches=Object.entries(stopData).filter(([id,d])=>norm(d.nm).includes(nq)).map(([id])=>id);qIdx=-1;qLast=q;}
+  if(!qMatches.length){setLed('warn','"'+q+'" 정류장이 선택한 노선 경유 정류장에 없습니다 — 그 정류장을 지나는 노선을 선택해 주세요');return;}
+  qIdx=(qIdx+1)%qMatches.length;
+  const d=stopData[qMatches[qIdx]];
+  map.setLevel(3);map.panTo(new kakao.maps.LatLng(d.lat,d.lon));
+  openStop(qMatches[qIdx]);
+  setLed('ok','정류장 "'+d.nm+'" ('+(qIdx+1)+'/'+qMatches.length+(qMatches.length>1?' — 다시 검색하면 다음 결과':'')+')');
+}
+
 /* ===================== 타이머·초기화 ===================== */
 function setTimer(){
   if(timer){clearInterval(timer);timer=null;}
@@ -603,6 +631,8 @@ function init(){
   const vs=$('veh');Object.entries(FLEET).forEach(([g,arr])=>{const og=document.createElement('optgroup');og.label=g+'번 배정';arr.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v+'호';og.appendChild(o);});vs.appendChild(og);});
   ['r1','r2','r3'].forEach(id=>$(id).onchange=()=>{hlVeh='';$('veh').value='';resetAllMarks();updateLegend();drawPath();setTimer();saveCfg();refresh();});
   $('veh').onchange=vehSearch;
+  $('qBtn').onclick=doSearch;
+  $('q').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();doSearch();}});
   $('ivl').onchange=()=>{setTimer();saveCfg();};
   $('refresh').onclick=()=>refresh();
   $('showPath').onchange=()=>{drawPath();saveCfg();};
