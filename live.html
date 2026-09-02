@@ -52,6 +52,11 @@
   .spop .rb{display:inline-block;border-radius:4px;color:#fff;font-weight:700;padding:0 5px;font-size:10.5px}
   .spop .app{color:#1e8449;font-weight:700}
   .spop .dim{color:#777}
+  #qList{display:none;position:absolute;top:100%;left:0;right:0;margin-top:3px;background:#fff;border:1px solid #9db2c9;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.18);z-index:60;max-height:260px;overflow-y:auto}
+  #qList .qi{padding:8px 10px;font-size:12.5px;cursor:pointer;border-bottom:1px solid #f0f1f3;display:flex;align-items:center;gap:6px}
+  #qList .qi:last-child{border-bottom:none}
+  #qList .qi:hover,#qList .qi.on{background:#eef4fb}
+  #qList .qi .rb{display:inline-block;border-radius:4px;color:#fff;font-weight:700;padding:0 5px;font-size:10px}
   #panel{width:420px;background:#fff;border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
   .ptit{padding:6px 12px;border-bottom:1px solid var(--line);font-size:12.5px;font-weight:700;background:#f8f9fa;display:flex;justify-content:space-between;align-items:center}
   #kpi{display:flex;gap:5px;padding:7px 9px;border-bottom:1px solid var(--line);background:#fff}
@@ -80,6 +85,7 @@
     select,button{padding:8px 9px;font-size:13px}
     .rsel{flex:1 1 100%}.rsel select{flex:1;max-width:100%}
     #q{flex:1;width:auto!important}
+    #qList{max-height:46vh}
     .tab{padding:11px 2px;font-size:13px}
     #wrap{flex-direction:column}
     #panel{width:100%;height:46%;border-left:none;border-top:1px solid var(--line)}
@@ -111,7 +117,7 @@
     <span class="rsel"><span class="rdot" style="background:#c2185b"></span><select id="r1"><option value="">노선 수집 중...</option></select></span>
     <span class="rsel"><span class="rdot" style="background:#00796b"></span><select id="r2"><option value="">+ 노선 2</option></select></span>
     <span class="rsel"><span class="rdot" style="background:#1565c0"></span><select id="r3"><option value="">+ 노선 3</option></select></span>
-    <span class="rsel" style="flex:0 1 auto"><input type="text" id="q" placeholder="정류장명·차량번호 검색" style="padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;width:150px"><button id="qBtn">🔍</button></span>
+    <span class="rsel" id="qWrap" style="flex:0 1 auto;position:relative"><input type="text" id="q" placeholder="정류장명·차량번호 검색" autocomplete="off" style="padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;width:150px"><button id="qBtn">🔍</button><div id="qList"></div></span>
     <select id="veh"><option value="">차량 찾기(54대)</option></select>
     <select id="ivl">
       <option value="3">3초</option><option value="5">5초</option><option value="10" selected>10초</option>
@@ -605,6 +611,35 @@ function doSearch(){
   setLed('ok','정류장 "'+d.nm+'" ('+(qIdx+1)+'/'+qMatches.length+(qMatches.length>1?' — 다시 검색하면 다음 결과':'')+')');
 }
 
+/* ===================== 정류장 자동완성 ===================== */
+let acItems=[],acIdx=-1;
+function acHide(){$('qList').style.display='none';acItems=[];acIdx=-1;}
+function acPick(nm){$('q').value=nm;acHide();qLast='';doSearch();}
+function acRender(){
+  const box=$('qList');
+  if(!acItems.length){acHide();return;}
+  box.innerHTML=acItems.map((it,i)=>'<div class="qi'+(i===acIdx?' on':'')+'" data-i="'+i+'">🚏 '+esc(it.nm)+' <span style="flex:1"></span>'+it.badges+'</div>').join('');
+  box.style.display='block';
+  box.querySelectorAll('.qi').forEach(el=>{
+    el.onmousedown=ev=>{ev.preventDefault();acPick(acItems[+el.dataset.i].nm);};
+  });
+}
+function acUpdate(){
+  const q=($('q').value||'').trim();
+  if(q.length<2||/^\d+$/.test(q)){acHide();return;}
+  const norm=x=>String(x).replace(/\s+/g,'');
+  const nq=norm(q);
+  const byName={};
+  Object.values(stopData).forEach(d=>{
+    if(!norm(d.nm).includes(nq)) return;
+    const e=byName[d.nm]||(byName[d.nm]={nm:d.nm,nos:new Set()});
+    d.rts.forEach(r=>e.nos.add(String(r.routeNo)+'|'+r.slotI));
+  });
+  acItems=Object.values(byName).slice(0,8).map(e=>({nm:e.nm,
+    badges:[...e.nos].map(x=>{const[no,si]=x.split('|');return '<span class="rb" style="background:'+SLOT_COL[+si]+'">'+esc(no)+'</span>';}).join(' ')}));
+  acIdx=-1;acRender();
+}
+
 /* ===================== 타이머·초기화 ===================== */
 function setTimer(){
   if(timer){clearInterval(timer);timer=null;}
@@ -631,8 +666,17 @@ function init(){
   const vs=$('veh');Object.entries(FLEET).forEach(([g,arr])=>{const og=document.createElement('optgroup');og.label=g+'번 배정';arr.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v+'호';og.appendChild(o);});vs.appendChild(og);});
   ['r1','r2','r3'].forEach(id=>$(id).onchange=()=>{hlVeh='';$('veh').value='';resetAllMarks();updateLegend();drawPath();setTimer();saveCfg();refresh();});
   $('veh').onchange=vehSearch;
-  $('qBtn').onclick=doSearch;
-  $('q').addEventListener('keydown',e=>{if(e.key==='Enter'){e.preventDefault();doSearch();}});
+  $('qBtn').onclick=()=>{acHide();doSearch();};
+  $('q').addEventListener('input',acUpdate);
+  $('q').addEventListener('blur',()=>setTimeout(acHide,150));
+  $('q').addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown'&&acItems.length){e.preventDefault();acIdx=(acIdx+1)%acItems.length;acRender();return;}
+    if(e.key==='ArrowUp'&&acItems.length){e.preventDefault();acIdx=(acIdx-1+acItems.length)%acItems.length;acRender();return;}
+    if(e.key==='Escape'){acHide();return;}
+    if(e.key==='Enter'){e.preventDefault();
+      if(acIdx>=0&&acItems[acIdx]){acPick(acItems[acIdx].nm);return;}
+      acHide();doSearch();}
+  });
   $('ivl').onchange=()=>{setTimer();saveCfg();};
   $('refresh').onclick=()=>refresh();
   $('showPath').onchange=()=>{drawPath();saveCfg();};
