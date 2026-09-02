@@ -1,0 +1,535 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#c2185b">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚌</text></svg>">
+<title>대도여객 실시간 관제</title>
+<style>
+  :root{--ink:#1a1d21;--ink2:#5a6068;--line:#e2e5e9;--bg:#f7f8fa;
+    --daedo:#c2185b;--dongsin:#00796b;--jin:#e65100;--gong:#5e35b1;--etc:#607d8b}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{font-family:'Malgun Gothic','맑은 고딕',system-ui,sans-serif;color:var(--ink);background:var(--bg);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  header{background:#fff;border-bottom:1px solid var(--line)}
+  .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 12px}
+  .row+.row{padding-top:0}
+  h1{font-size:15px;font-weight:700;margin-right:6px;white-space:nowrap}
+  select,button{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;background:#fff;max-width:100%}
+  .rsel{display:inline-flex;align-items:center;gap:3px}
+  .rdot{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none}
+  .rsel select{max-width:230px}
+  button{cursor:pointer;font-weight:700}
+  button.rec{background:#c0392b;color:#fff;border-color:#c0392b}
+  label.tg{font-size:12px;display:inline-flex;align-items:center;gap:3px;padding:4px 6px;border-radius:6px;background:#f4f6f8;cursor:pointer;white-space:nowrap}
+  .chip{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border:1px solid #9db2c9;border-radius:20px;cursor:pointer;font-size:12px;background:#eef2f7;font-weight:700;user-select:none;white-space:nowrap}
+  .chip.off{background:#fff;border-color:#e2e5e9;opacity:.45}
+  .cdot{width:9px;height:9px;border-radius:50%;display:inline-block}
+  #led{width:10px;height:10px;border-radius:50%;background:#bbb;display:inline-block;margin-right:5px;box-shadow:0 0 0 2px #fff inset}
+  #led.ok{background:#2ecc71}#led.warn{background:#f1c40f}#led.bad{background:#e74c3c;animation:blink 1s infinite}
+  @keyframes blink{50%{opacity:.3}}
+  #status{font-size:12px;color:var(--ink2);flex:1;min-width:160px}
+  #wrap{flex:1;display:flex;min-height:0}
+  .maparea{position:relative;flex:1;display:flex}
+  #map{flex:1}
+  #legend{position:absolute;left:10px;bottom:24px;z-index:3;background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:11px;line-height:1.7}
+  .sq{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px}
+  #keywarn{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:#f0f2f5;z-index:5;text-align:center;font-size:14px;line-height:2;color:#555}
+  .bus{position:relative;border-radius:6px;color:#fff;font-weight:700;font-size:11px;padding:2px 6px;box-shadow:0 1px 4px rgba(0,0,0,.5);white-space:nowrap;border:1.5px solid #fff;cursor:pointer;display:flex;align-items:center;gap:3px;transition:opacity .4s}
+  .bus .rt{border-radius:4px;padding:0 4px;font-size:9.5px;font-weight:700;border:1px solid rgba(255,255,255,.8)}
+  .bus .ar{display:inline-block;width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:8px solid #fff;transform-origin:50% 60%}
+  .bus.hl{outline:3px solid #ffd600;outline-offset:1px;z-index:99}
+  .bus.stale{opacity:.5;border-style:dashed}
+  #panel{width:420px;background:#fff;border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .ptit{padding:6px 12px;border-bottom:1px solid var(--line);font-size:12.5px;font-weight:700;background:#f8f9fa;display:flex;justify-content:space-between;align-items:center}
+  #kpi{display:flex;gap:5px;padding:7px 9px;border-bottom:1px solid var(--line);background:#fff}
+  .kb{flex:1;text-align:center;border:1px solid var(--line);border-radius:8px;padding:4px 2px}
+  .kb b{font-size:17px;display:block;line-height:1.2}
+  .kb span{font-size:10px;color:var(--ink2)}
+  #tabs{display:flex;border-bottom:1px solid var(--line);background:#f8f9fa}
+  .tab{flex:1;text-align:center;padding:8px 2px;font-size:12.5px;cursor:pointer;border-bottom:2px solid transparent;user-select:none;white-space:nowrap}
+  .tab.on{font-weight:700;border-bottom-color:#c2185b;background:#fff}
+  #tabBody{flex:1;overflow:auto;font-size:11.5px;-webkit-overflow-scrolling:touch}
+  table{border-collapse:collapse;width:100%;font-size:11.5px}
+  th,td{padding:4px 7px;border-bottom:1px solid #f0f1f3;text-align:left;white-space:nowrap}
+  th{position:sticky;top:0;background:#f4f6f8;font-size:11px;z-index:1}
+  .sechead td{background:#f1f4f7;font-weight:700;color:#444;font-size:11px;padding:5px 8px}
+  .co{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:3px}
+  .run{color:#1e8449;font-weight:700}.idle{color:#999}.warnc{color:#c0392b;font-weight:700}
+  tr.clk{cursor:pointer}tr.clk:hover{background:#f4f7fa}tr.sel{background:#fff8d6}
+  .ev{padding:5px 10px;border-bottom:1px solid #f0f1f3;font-size:11.5px}
+  .ev b{margin-right:4px}
+  #panelToggle{display:none}
+  @media (max-width:820px){
+    .row{padding:5px 8px;gap:5px}
+    h1{font-size:14px}
+    select,button{padding:8px 9px;font-size:13px}
+    .rsel{flex:1 1 100%}.rsel select{flex:1;max-width:100%}
+    .tab{padding:11px 2px;font-size:13px}
+    #wrap{flex-direction:column}
+    #panel{width:100%;height:46%;border-left:none;border-top:1px solid var(--line)}
+    #panel.min{height:auto}
+    #panel.min #kpi,#panel.min #tabs,#panel.min #tabBody{display:none}
+    #panelToggle{display:inline-block}
+    #legend{font-size:10px;left:6px;bottom:6px;max-width:80%;line-height:1.5}
+    th,td{padding:7px 7px}
+    #status{min-width:100%}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="row">
+    <h1>대도여객 실시간 관제</h1>
+    <span class="rsel"><span class="rdot" style="background:#c2185b"></span><select id="r1"><option value="">노선 수집 중...</option></select></span>
+    <span class="rsel"><span class="rdot" style="background:#00796b"></span><select id="r2"><option value="">+ 노선 2</option></select></span>
+    <span class="rsel"><span class="rdot" style="background:#1565c0"></span><select id="r3"><option value="">+ 노선 3</option></select></span>
+    <select id="veh"><option value="">차량 찾기(54대)</option></select>
+    <select id="ivl">
+      <option value="3">3초</option><option value="5">5초</option><option value="10" selected>10초</option>
+      <option value="15">15초</option><option value="30">30초</option><option value="60">60초</option><option value="0">수동</option>
+    </select>
+    <button id="refresh">새로고침</button>
+    <span id="status"><span id="led"></span><span id="stxt">준비 중...</span></span>
+  </div>
+  <div class="row">
+    <label class="tg"><input type="checkbox" id="showPath" checked> 노선도</label>
+    <label class="tg"><input type="checkbox" id="showStops"> 정류장</label>
+    <label class="tg"><input type="checkbox" id="showRt" checked> 라벨에 노선</label>
+    <label class="tg"><input type="checkbox" id="follow"> 선택차량 따라가기</label>
+    <button id="recBtn">● 기록</button>
+    <button id="csvBtn">CSV</button>
+    <span id="coChips" style="display:inline-flex;gap:4px;flex-wrap:wrap"></span>
+  </div>
+</header>
+<div id="wrap">
+  <div class="maparea">
+    <div id="map"></div>
+    <div id="legend">
+      <span class="sq" style="background:var(--daedo)"></span>대도(13××)
+      <span class="sq" style="background:var(--dongsin)"></span>동신(15·16·70××)
+      <span class="sq" style="background:var(--jin)"></span>진평(10·11××)
+      <span class="sq" style="background:var(--gong)"></span>공영(2×××)
+      <span class="sq" style="background:var(--etc)"></span>기타 &nbsp;｜ 노선도: <span id="legRoutes"></span><br>
+      <span style="color:#777">▲ 진행방향(추정) · 점선/반투명 = 신호 지연 · 위치는 BIS 정류장 통과 기준</span>
+    </div>
+    <div id="keywarn"><div>지도를 불러오지 못했습니다.<br>인터넷 연결과 카카오디벨로퍼스 [카카오맵] 활성화 상태를 확인해 주세요.</div></div>
+  </div>
+  <div id="panel">
+    <div class="ptit"><span>관제 현황 <span id="ptime" style="color:#888;font-weight:400"></span></span><button id="panelToggle">접기/펼치기</button></div>
+    <div id="kpi">
+      <div class="kb"><b id="kRun" style="color:#c2185b">-</b><span>대도 운행</span></div>
+      <div class="kb"><b id="kIdle" style="color:#888">-</b><span>대도 미포착</span></div>
+      <div class="kb"><b id="kDs" style="color:#00796b">-</b><span>동신</span></div>
+      <div class="kb"><b id="kJp" style="color:#e65100">-</b><span>진평</span></div>
+      <div class="kb"><b id="kGy" style="color:#5e35b1">-</b><span>공영</span></div>
+    </div>
+    <div id="tabs">
+      <div class="tab on" data-t="daedo">대도</div>
+      <div class="tab" data-t="동신">동신</div>
+      <div class="tab" data-t="진평">진평</div>
+      <div class="tab" data-t="공영">공영</div>
+      <div class="tab" data-t="log">이벤트·기록 <span id="recState" style="color:#c0392b"></span></div>
+    </div>
+    <div id="tabBody">
+      <div id="fleet"><table><thead><tr><th>차량</th><th>배정</th><th>상태</th><th>현재 위치</th><th>노선</th><th>갱신</th></tr></thead><tbody id="fleetB"></tbody></table></div>
+      <div id="roster" style="display:none"><table><thead><tr><th>차량</th><th>상태</th><th>노선</th><th>현재/마지막 정류장</th><th>포착</th></tr></thead><tbody id="rosterB"></tbody></table></div>
+      <div id="log" style="display:none">
+        <div class="ptit" style="background:#fff"><span>이벤트 (출발·입고 추정)</span><span id="evCnt" style="color:#888;font-weight:400"></span></div>
+        <div id="events"></div>
+        <div class="ptit" style="background:#fff"><span>위치 기록</span><span id="logCnt" style="color:#888;font-weight:400"></span></div>
+        <table><thead><tr><th>시각</th><th>차량</th><th>회사</th><th>노선</th><th>통과 정류장</th><th>순번</th><th>속도</th></tr></thead><tbody id="logB"></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=b01dd4f91989714d3f4d4baa8891962b&autoload=false"></script>
+<script>
+'use strict';
+/* ===================== 설정·상수 ===================== */
+const KEY='2BwOvsCVUB%2FNobU%2BYTo5LaFsL%2FI1ZiErlQ1NdTvAdRqrxR1tYweMGurrbtGi%2FMu78eO0p523%2F1zoHtv74XQPQQ%3D%3D';
+const CITY='32020';
+const DEPOT={lat:37.42141,lon:127.96392};
+const GH='https://raw.githubusercontent.com/no111jk-cell/daedo-bus-app/main/';
+const HUBS=['WJB251060001','WJB251053017','WJB251061032','WJB251056058','WJB251000130','WJB251000223','WJB251061023','WJB251053004','WJB251061028','WJB251011034','WJB251000045','WJB251068025'];
+// 차량관리대장 기준 배정 (2026.9.)
+const FLEET={'3·4':['1305','1329','1330','1335','1341','1348'],'13':['1306','1314','1317','1323','1324','1327','1333'],
+ '16':['1301','1307','1311','1321','1337','1340','1346','1358'],'16-1':['1315','1336','1359'],'21-25':['1309','1342','1349'],
+ '30':['1313','1356','1357'],'31·34':['1310','1318','1319','1320','1326','1328','1334','1345','1347','1350'],'50':['1352','1353','1354','1355'],
+ '81·82':['1344'],'90':['1316','1338','1339'],'100-2':['1332','1351'],'예비':['1322','1325','1331','1343']};
+const GRP_NOS={'3·4':['3','3-1','4','4-1'],'13':['13'],'16':['16'],'16-1':['16-1'],'21-25':['21','22','23','24','25'],'30':['30'],
+ '31·34':['31','34'],'50':['50'],'81·82':['81','82'],'90':['90'],'100-2':['100-2'],'예비':[]};
+const VEH_GRP={};Object.entries(FLEET).forEach(([g,vs])=>vs.forEach(v=>VEH_GRP[v]=g));
+const NO_GRP={};Object.entries(GRP_NOS).forEach(([g,nos])=>nos.forEach(n=>NO_GRP[n]=g));
+const GROUP_NO={'시내순환3번':['3'],'시내순환3-1번':['3-1'],'시내순환4번':['4'],'시내순환4-1번':['4-1'],'혁신순환16번':['16'],'혁신순환16-1번':['16-1'],
+ '혁신지선13번':['13'],'신림(21~25번대)':['21','22','23','24','25'],'연대30번':['30'],'한라대90번':['90'],'100-2번 기업도시':['100-2'],
+ '성문사81번':['81'],'82번':['82'],'50번(한정면허)':['50'],'귀래31·34 매지리':['31','34'],'서곡32번':['32']};
+const NO_GROUP={};Object.entries(GROUP_NO).forEach(([g,nos])=>nos.forEach(n=>{(NO_GROUP[n]=NO_GROUP[n]||[]).push(g);}));
+const CO_COL={'대도':'#c2185b','동신':'#00796b','진평':'#e65100','공영':'#5e35b1','기타':'#607d8b'};
+const STALE_TICKS=3, DROP_TICKS=10, MAX_LOG=6000;
+
+/* ===================== 상태 ===================== */
+const $=id=>document.getElementById(id);
+let map=null, routes={}, routeMeta={}, paths=null, stopIdx=null;
+let lines=[], stopOvs=[], pathSeq=0, extCache={}, extApiOk=null;
+let vehMarks={}, tickNo=0, hlVeh='';
+const SLOT_COL=['#c2185b','#00796b','#1565c0'];
+let timer=null, refreshing=false, commFail=false, partialFail=false, lastOkAt=null;
+let lastVs=null, lastTs=null, spdCache={}, spdTick=0, lastPos={};
+let rec=false, logRows=[], events=[], lastSeen={}, seenAt={}, curTab='daedo';
+let otherSeen={}, cfg={};
+const coFilter={'대도':true,'동신':true,'진평':true,'공영':true,'기타':true};
+try{otherSeen=JSON.parse(localStorage.getItem('wj_bus_roster')||'{}');}catch(e){}
+try{cfg=JSON.parse(localStorage.getItem('wj_ctl_cfg')||'{}');}catch(e){}
+function saveCfg(){try{localStorage.setItem('wj_ctl_cfg',JSON.stringify({routes:selected(),ivl:$('ivl').value,showPath:$('showPath').checked,showStops:$('showStops').checked,showRt:$('showRt').checked,co:coFilter}));}catch(e){}}
+function saveRoster(){try{localStorage.setItem('wj_bus_roster',JSON.stringify(otherSeen));}catch(e){}}
+
+/* ===================== 유틸 ===================== */
+function company(vn){const m=String(vn).match(/(\d{4})$/);if(!m)return '기타';const h=m[1].slice(0,2);
+  if(h==='13')return '대도';if(h==='15'||h==='16'||h==='70')return '동신';if(h==='10'||h==='11')return '진평';if(m[1][0]==='2')return '공영';return '기타';}
+const v4of=vn=>{const m=String(vn).match(/(\d{4})$/);return m?m[1]:String(vn);};
+function hav(a,b,c,d){const R=6371,r=x=>x*Math.PI/180,dl=r(c-a),dg=r(d-b);const h=Math.sin(dl/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
+function bearing(a,b,c,d){const r=x=>x*Math.PI/180,y=Math.sin(r(d-b))*Math.cos(r(c)),x=Math.cos(r(a))*Math.sin(r(c))-Math.sin(r(a))*Math.cos(r(c))*Math.cos(r(d-b));return (Math.atan2(y,x)*180/Math.PI+360)%360;}
+const hhmmss=d=>d.toLocaleTimeString('ko-KR',{hour12:false});
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+function setLed(state,text){const l=$('led');l.className=state;$('stxt').textContent=text;}
+async function pool(items,worker,limit){const q=[...items];let active=0;return new Promise(done=>{const next=()=>{if(!q.length&&active===0){done();return;}while(active<limit&&q.length){active++;worker(q.shift()).catch(()=>{}).finally(()=>{active--;next();});}};next();});}
+window.addEventListener('error',e=>{try{setLed('bad','오류: '+(e.message||'알 수 없는 오류'));}catch(_){}});
+
+/* ===================== API (초당 제한 준수·적응형) ===================== */
+let quotaHit=false, rateHit=0, rps=10, rpsClean=0;
+const bucket={t:[]};
+async function rateSlot(){ // 초당 rps건 이하로 발사 간격 조절
+  for(;;){const now=Date.now();bucket.t=bucket.t.filter(x=>now-x<1000);
+    if(bucket.t.length<rps){bucket.t.push(now);return;}
+    await new Promise(z=>setTimeout(z,60+Math.random()*60));}
+}
+async function api(path,params,retry=0){
+  const u='https://apis.data.go.kr/1613000/'+path+'?serviceKey='+KEY+'&_type=json&'+params;
+  await rateSlot();
+  try{
+    const t=await (await fetch(u)).text();
+    if(t.includes('PER_SECOND_EXCEEDS')){ // 코드23: 초당 제한 → 감속 후 재시도
+      rateHit++; rps=Math.max(3,Math.floor(rps*0.6)); rpsClean=0;
+      if(retry<5){await new Promise(z=>setTimeout(z,500+retry*400));return api(path,params,retry+1);}
+      return null;
+    }
+    if(t.includes('LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS')){quotaHit=true;return null;} // 코드22: 일일 한도
+    if(t.includes('cmmMsgHeader')){ if(retry<1){await new Promise(z=>setTimeout(z,300));return api(path,params,retry+1);} return null; }
+    const j=JSON.parse(t);
+    let it=j?.response?.body?.items?.item;
+    if(it===undefined||it===''||it===null) return [];
+    return Array.isArray(it)?it:[it];
+  }catch(e){ if(retry<1){await new Promise(z=>setTimeout(z,300));return api(path,params,retry+1);} return null; }
+}
+
+/* ===================== 노선 선택 ===================== */
+function selected(){const a=[];['r1','r2','r3'].forEach(id=>{const v=$(id).value;if(v&&!a.includes(v))a.push(v);});return a;}
+function slotOf(no){return selected().indexOf(String(no));}
+const isWonju=rid=>String(rid).startsWith('WJB251'); // WJB258 = 횡성군 노선(동일 번호 혼재) 제외
+
+/* ===================== 노선 목록 ===================== */
+async function loadRoutes(){
+  setLed('','노선 목록 수집 중...');
+  const seen={};
+  let all=await api('BusRouteInfoInqireService/getRouteNoList','cityCode='+CITY+'&numOfRows=1000&pageNo=1');
+  if(!all||!all.length){await new Promise(z=>setTimeout(z,500));all=await api('BusRouteInfoInqireService/getRouteNoList','cityCode='+CITY+'&numOfRows=1000&pageNo=1');}
+  if(all&&all.length){
+    all.forEach(r=>{const no=String(r.routeno);(seen[no]=seen[no]||new Set()).add(r.routeid);
+      routeMeta[r.routeid]={no,s:r.startnodenm||'',e:r.endnodenm||''};});
+  }else{
+    for(const h of HUBS){
+      const list=await api('BusSttnInfoInqireService/getSttnThrghRouteList','cityCode='+CITY+'&nodeid='+h+'&numOfRows=200&pageNo=1')||[];
+      list.forEach(r=>{const no=String(r.routeno);(seen[no]=seen[no]||new Set()).add(r.routeid);});
+    }
+  }
+  routes=Object.fromEntries(Object.entries(seen).map(([k,v])=>[k,[...v]]));
+  if(!Object.keys(routes).length){setLed('bad','노선 목록을 받지 못했습니다 — 인터넷 연결 확인 후 [새로고침]');$('refresh').onclick=()=>loadRoutes();return;}
+  // 횡성 노선 제거
+  Object.keys(routes).forEach(k=>{routes[k]=routes[k].filter(isWonju);if(!routes[k].length)delete routes[k];});
+  const sortNo=(a,b)=>{const na=parseFloat(a),nb=parseFloat(b);if(isNaN(na)&&isNaN(nb))return a.localeCompare(b);if(isNaN(na))return 1;if(isNaN(nb))return -1;return na-nb||a.localeCompare(b);};
+  const mine=Object.keys(routes).filter(k=>NO_GRP[k]!==undefined).sort(sortNo);
+  const others=Object.keys(routes).filter(k=>NO_GRP[k]===undefined).sort(sortNo);
+  const fill=(id,ph)=>{const sel=$(id);sel.innerHTML='';const o0=document.createElement('option');o0.value='';o0.textContent=ph;sel.appendChild(o0);
+    const mk=(label,keys)=>{const og=document.createElement('optgroup');og.label=label;keys.forEach(k=>{const o=document.createElement('option');o.value=k;const m=routeMeta[routes[k][0]];o.textContent=k+'번'+(m&&m.s?' '+m.s+'↔'+m.e:'')+' ('+routes[k].length+')';og.appendChild(o);});sel.appendChild(og);};
+    mk('★ 대도 노선',mine);mk('타사·공영 노선',others);};
+  fill('r1','노선 1 선택');fill('r2','+ 노선 2 (선택)');fill('r3','+ 노선 3 (선택)');
+  const want=(Array.isArray(cfg.routes)&&cfg.routes.length)?cfg.routes:['16'];
+  ['r1','r2','r3'].forEach((id,i)=>{const v=want[i];if(v&&routes[v])$(id).value=v;});
+  if(!selected().length&&mine.length)$('r1').value=mine[0];
+  updateLegend();
+  setLed('','노선 '+Object.keys(routes).length+'개 확인 — 첫 조회 중...');
+  setTimer(); drawPath(); refresh();
+}
+async function loadGH(){
+  const get=async f=>{try{return await (await fetch('./'+f)).json();}catch(e){return await (await fetch(GH+f)).json();}};
+  try{paths=await get('route_paths.json');stopIdx=await get('stop_index.json');}catch(e){paths=null;}
+}
+
+/* ===================== 노선도 ===================== */
+function clearLines(){lines.forEach(l=>l.setMap(null));lines=[];stopOvs.forEach(o=>o.setMap(null));stopOvs=[];}
+function selGroups(){const out=[];selected().forEach(n=>(NO_GROUP[n]||[]).forEach(g=>{if(!out.includes(g))out.push(g);}));return out;}
+function addStopDot(lat,lon,color,nm){const el=document.createElement('div');el.style.cssText='width:7px;height:7px;border-radius:50%;background:#fff;border:2px solid '+color;el.title=nm||'';const ov=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(lat,lon),content:el,zIndex:2});ov.setMap(map);stopOvs.push(ov);}
+function drawPath(){
+  pathSeq++; clearLines();
+  if(!$('showPath').checked) return;
+  drawPathExt();
+  if(!paths) return;
+  selected().forEach((no,slot)=>{
+    (NO_GROUP[no]||[]).forEach(g=>{Object.values(paths[g]||{}).forEach(v=>{
+      const pts=(v.path||[]).map(p=>new kakao.maps.LatLng(p[0],p[1]));if(pts.length<2)return;
+      const pl=new kakao.maps.Polyline({path:pts,strokeWeight:4,strokeColor:SLOT_COL[slot],strokeOpacity:.5});pl.setMap(map);lines.push(pl);});});
+    if($('showStops').checked&&stopIdx){
+      const want=new Set(NO_GROUP[no]||[]),seen=new Set();
+      Object.entries(stopIdx).forEach(([nm,arr])=>arr.forEach(st=>{if(!want.has(st.sachin))return;const k=nm+st.lat.toFixed(4);if(seen.has(k))return;seen.add(k);addStopDot(st.lat,st.lng,SLOT_COL[slot],nm);}));
+    }
+  });
+}
+async function drawPathExt(){
+  const my=pathSeq;
+  const targets=selected().map((no,slot)=>({no,slot})).filter(t=>!NO_GROUP[t.no]);
+  if(!targets.length||extApiOk===false) return;
+  const jobs=[];targets.forEach(t=>(routes[t.no]||[]).forEach(rid=>jobs.push({rid,slot:t.slot})));
+  await pool(jobs,async ({rid,slot})=>{
+    let segs=extCache[rid];
+    if(segs===undefined){
+      const url='https://apis.data.go.kr/1613000/BusRouteInfoInqireService/getRouteAcctoThrghSttnList?serviceKey='+KEY+'&_type=json&cityCode='+CITY+'&routeId='+rid+'&numOfRows=500&pageNo=1';
+      try{
+        await rateSlot();
+        let t=await (await fetch(url)).text();
+        if(t.includes('cmmMsgHeader')){await new Promise(z=>setTimeout(z,500));await rateSlot();t=await (await fetch(url)).text();}
+        if(t.includes('SERVICE_KEY_IS_NOT_REGISTERED')){extApiOk=false;return;}
+        const j=JSON.parse(t);let it=j?.response?.body?.items?.item||[];if(!Array.isArray(it))it=[it];
+        const dirs={};it.forEach(x=>{const d=String(x.updowncd??'0');(dirs[d]=dirs[d]||[]).push(x);});
+        segs=Object.values(dirs).map(arr=>{arr.sort((a,b)=>(+a.nodeord)-(+b.nodeord));return arr.map(x=>({lat:+x.gpslati,lon:+x.gpslong,nm:x.nodenm})).filter(p=>p.lat>36&&p.lat<38.5);}).filter(a=>a.length>1);
+        if(segs.length) extCache[rid]=segs; extApiOk=true;
+      }catch(e){segs=[];}
+    }
+    if(my!==pathSeq||!segs) return;
+    segs.forEach(seg=>{
+      const pl=new kakao.maps.Polyline({path:seg.map(p=>new kakao.maps.LatLng(p.lat,p.lon)),strokeWeight:3,strokeColor:SLOT_COL[slot],strokeOpacity:.5});pl.setMap(map);lines.push(pl);
+      if($('showStops').checked) seg.forEach(p=>addStopDot(p.lat,p.lon,SLOT_COL[slot],p.nm));
+    });
+  },3);
+}
+
+/* ===================== 조회 ===================== */
+function targetRouteIds(){const ids=[];selected().forEach(n=>(routes[n]||[]).forEach(id=>{if(isWonju(id)&&!ids.includes(id))ids.push(id);}));return ids;}
+async function refresh(){
+  if(refreshing||!Object.keys(routes).length) return; refreshing=true;
+  try{
+    const ids=targetRouteIds(); if(!ids.length){setLed('warn','노선을 선택하세요');return;}
+    setLed(lastOkAt?'ok':'','조회 중… (계통 '+ids.length+'개)');
+    const buses={}; let ok=0,err=0; quotaHit=false; const rateBefore=rateHit;
+    await pool(ids,async rid=>{
+      const list=await api('BusLcInfoInqireService/getRouteAcctoBusLcList','cityCode='+CITY+'&routeId='+rid+'&numOfRows=100&pageNo=1');
+      if(list===null){err++;return;} ok++;
+      list.forEach(b=>{if(b.vehicleno)buses[b.vehicleno]=b;});
+    },12);
+    if(rateHit===rateBefore){rpsClean++; if(rpsClean>=5&&rps<10){rps++;rpsClean=0;}}
+    commFail=(ok===0&&err>0); partialFail=(err>0&&ok>0);
+    if(!commFail) lastOkAt=new Date();
+    lastVs=Object.values(buses); lastTs=new Date();
+    paint(lastVs,lastTs,{ok,err,rate:rateHit-rateBefore});
+  }catch(e){setLed('bad','오류: '+e.message);}
+  finally{refreshing=false;}
+}
+
+/* ===================== 마커 ===================== */
+function glide(e,lat2,lon2){
+  if(e.anim){cancelAnimationFrame(e.anim);e.anim=null;}
+  const lat1=e.curLat??e.lat, lon1=e.curLon??e.lon; e.lat=lat2;e.lon=lon2;
+  if(Math.abs(lat2-lat1)+Math.abs(lon2-lon1)<1e-7){e.curLat=lat2;e.curLon=lon2;return;}
+  const t0=performance.now(),D=1100;
+  const step=t=>{const k=Math.min(1,(t-t0)/D),z=k*(2-k);e.curLat=lat1+(lat2-lat1)*z;e.curLon=lon1+(lon2-lon1)*z;e.ov.setPosition(new kakao.maps.LatLng(e.curLat,e.curLon));e.anim=k<1?requestAnimationFrame(step):null;};
+  e.anim=requestAnimationFrame(step);
+}
+function busEl(v4,co,rt){
+  const el=document.createElement('div');el.className='bus';el.style.background=CO_COL[co];
+  el.innerHTML='<span class="ar" style="display:none"></span><span class="nm">🚌'+v4+'</span><span class="rt"'+($('showRt').checked?'':' style="display:none"')+'>'+esc(rt)+'</span>';
+  return el;
+}
+function resetAllMarks(){Object.values(vehMarks).forEach(e=>{if(e.anim)cancelAnimationFrame(e.anim);e.ov.setMap(null);});vehMarks={};lastPos={};}
+function updateLegend(){
+  const sel=selected();
+  $('legRoutes').innerHTML=sel.map((n,i)=>'<span class="sq" style="background:'+SLOT_COL[i]+'"></span>'+esc(n)+'번 ').join('')||'<span style="color:#999">노선 미선택</span>';
+}
+function paint(vs,now,stat){
+  tickNo++;
+  const ts=hhmmss(now), seen4={}; let shown=0, skipped=0;
+  vs.forEach(b=>{
+    const vn=String(b.vehicleno), v4=v4of(vn), co=company(vn);
+    const lat=+b.gpslati, lon=+b.gpslong, rt=String(b.routenm??'').trim();
+    const slotI=slotOf(rt); if(slotI<0){skipped++;return;} // 조회 계통에 다른 번호(예: 16 조회 시 16-1)가 섞여 오면 제외
+    if(!coFilter[co]) return; shown++;
+    // 속도·방향(직전 갱신 대비)
+    let spd='', brg=null;
+    if(spdTick===+now&&vn in spdCache){spd=spdCache[vn].s;brg=spdCache[vn].b;}
+    else{
+      const p=lastPos[vn];
+      if(p&&+p.t!==+now){const dt=(now-p.t)/3600000,km=hav(p.lat,p.lon,lat,lon);
+        if(dt>0){ if(km>0.02){spd=Math.round(km/dt);if(spd>95)spd='';brg=bearing(p.lat,p.lon,lat,lon);} else {spd=0;brg=p.brg??null;} } }
+      lastPos[vn]={lat,lon,t:now,brg:brg??(lastPos[vn]?.brg??null)};
+      if(spdTick!==+now){spdTick=+now;spdCache={};} spdCache[vn]={s:spd,b:lastPos[vn].brg};
+      brg=lastPos[vn].brg;
+    }
+    if(co==='대도'){seen4[v4]={b,spd};lastSeen[v4]={t:ts,nodenm:b.nodenm||'',routenm:rt};}
+    else otherSeen[vn]={co,routenm:rt,nodenm:b.nodenm||'',t:ts,d:now.toISOString().slice(0,10),live:tickNo};
+    let e=vehMarks[vn];
+    if(!e){
+      const el=busEl(v4,co,rt);
+      const ov=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(lat,lon),content:el,zIndex:co==='대도'?6:4});ov.setMap(map);
+      e=vehMarks[vn]={ov,el,lat,lon,curLat:lat,curLon:lon,anim:null,tick:tickNo,v4,co,rt,first:ts};
+      el.onclick=()=>{hlVeh=v4;$('veh').value=(v4 in VEH_GRP)?v4:'';refreshHighlight();renderAll();};
+      if(co==='대도'&&(!seenAt[v4]||(+now-seenAt[v4])>10*60000)) addEvent(ts,v4,'출발/포착','🚌 '+rt+'번 · '+(b.nodenm||''));
+    }else{ glide(e,lat,lon); e.tick=tickNo; e.el.classList.remove('stale'); }
+    if(co==='대도') seenAt[v4]=+now;
+    e.rt=rt; e.nodenm=b.nodenm||''; e.nodeord=b.nodeord; e.spd=spd; e.ts=ts;
+    const rtEl=e.el.querySelector('.rt'); if(rtEl){rtEl.textContent=rt;rtEl.style.background=SLOT_COL[slotI];rtEl.style.color='#fff';rtEl.style.display=$('showRt').checked?'':'none';}
+    const ar=e.el.querySelector('.ar'); if(ar){ if(brg!==null&&brg!==undefined){ar.style.display='';ar.style.transform='rotate('+Math.round(brg)+'deg)';} else ar.style.display='none'; }
+    e.el.title=vn+' ('+co+') | '+rt+'번 | '+(b.nodenm||'')+' | 순번 '+(b.nodeord||'')+(spd!==''?' | 구간속도 '+spd+'km/h':'')+' | '+ts;
+    e.el.classList.toggle('hl',v4===hlVeh);
+    if(rec) logRows.push([ts,vn,co,rt,b.nodenm||'',b.nodeord||'',spd===''?'':spd]);
+  });
+  if(logRows.length>MAX_LOG) logRows.splice(0,logRows.length-MAX_LOG);
+  // 미수신 차량: 유지 → 지연 표시 → 장기 미수신 시 제거(입고 추정 이벤트)
+  Object.entries(vehMarks).forEach(([vn,e])=>{
+    const gap=tickNo-e.tick;
+    if(gap>=DROP_TICKS){ if(e.anim)cancelAnimationFrame(e.anim); e.ov.setMap(null); delete vehMarks[vn];
+      if(e.co==='대도') addEvent(ts,e.v4,'신호 소실(입고 추정)','마지막 '+e.ts+' '+(e.nodenm||'')+' · '+e.rt+'번'); }
+    else if(gap>=STALE_TICKS){ e.el.classList.add('stale'); e.el.title=e.el.title.split(' | 신호')[0]+' | 신호 지연('+gap+'회 미수신, 마지막 위치 유지)'; }
+  });
+  // 대도 배정 현황
+  const grps=new Set(selected().map(n=>NO_GRP[n]).filter(Boolean));
+  const fleetShown=Object.entries(VEH_GRP).filter(([v4,g])=>grps.has(g)||seen4[v4]);
+  // 따라가기
+  if($('follow').checked&&hlVeh){const fe=Object.values(vehMarks).find(e=>e.v4===hlVeh);if(fe)map.panTo(new kakao.maps.LatLng(fe.lat,fe.lon));}
+  // 상태줄
+  const modeNm=selected().map(n=>n+'번').join('·')+(skipped?' (타번호 '+skipped+'대 제외)':'');
+  if(quotaHit) setLed('bad','⚠ API 일일 트래픽 한도 초과(코드22) — 공공데이터포털에서 트래픽 증가 신청 필요, 내일 0시 초기화');
+  else if(stat.rate>0&&!commFail) setLed('warn',modeNm+' | 포착 '+(vs.length-skipped)+'대(표시 '+shown+') | '+ts+' | 초당 요청제한(코드23) 감지 → 자동 감속(현재 '+rps+'건/초)');
+  else if(commFail) setLed('bad','⚠ 위치 데이터 수신 실패 ('+ts+') — 인터넷 확인. 폰에서 미리보기(content://)로 열면 차단됨: 내 파일에서 길게 눌러 [Chrome으로 열기]'+(lastOkAt?' · 마지막 정상 수신 '+hhmmss(lastOkAt):''));
+  else if(partialFail) setLed('warn',modeNm+' | 포착 '+(vs.length-skipped)+'대(표시 '+shown+') | 일부 호출 실패('+stat.err+'/'+(stat.ok+stat.err)+') '+ts);
+  else setLed('ok',modeNm+' | 포착 '+(vs.length-skipped)+'대(표시 '+shown+') | '+ts+(rec?' | 기록 '+logRows.length+'행':''));
+  $('ptime').textContent='('+ts+')';
+  renderAll(fleetShown,seen4);
+  saveRoster();
+}
+function refreshHighlight(){Object.values(vehMarks).forEach(e=>e.el.classList.toggle('hl',e.v4===hlVeh));}
+function addEvent(ts,v4,type,detail){events.unshift({ts,v4,type,detail});if(events.length>300)events.length=300;}
+
+/* ===================== 패널 ===================== */
+let _fleetShown=[], _seen4={};
+function renderAll(fleetShown,seen4){
+  if(fleetShown){_fleetShown=fleetShown;_seen4=seen4;}
+  renderKpi(); if(curTab==='daedo') renderFleet(); else if(curTab==='log') renderLog(); else renderRoster();
+}
+function renderKpi(){
+  const run=_fleetShown.filter(([v])=>_seen4[v]).length;
+  $('kRun').textContent=commFail?'⚠':run; $('kIdle').textContent=commFail?'-':(_fleetShown.length-run);
+  const live=Object.values(otherSeen).filter(o=>o.live===tickNo);
+  $('kDs').textContent=live.filter(o=>o.co==='동신').length;$('kJp').textContent=live.filter(o=>o.co==='진평').length;$('kGy').textContent=live.filter(o=>o.co==='공영').length;
+}
+function renderFleet(){
+  const run=_fleetShown.filter(([v])=>_seen4[v]).sort((a,b)=>a[0].localeCompare(b[0]));
+  const idle=_fleetShown.filter(([v])=>!_seen4[v]).sort((a,b)=>a[0].localeCompare(b[0]));
+  let h='<tr class="sechead"><td colspan="6">🟢 운행 중 '+run.length+'대</td></tr>';
+  run.forEach(([v4,g])=>{const s=_seen4[v4],b=s.b,m=Object.values(vehMarks).find(e=>e.v4===v4);
+    h+=`<tr class="clk${v4===hlVeh?' sel':''}" data-v="${v4}" data-lat="${b.gpslati}" data-lon="${b.gpslong}"><td><span class="co" style="background:#c2185b"></span><b>${v4}</b></td><td>${g}</td><td class="run">운행</td><td>${esc(b.nodenm||'')}${s.spd!==''?' <span style="color:#888">'+s.spd+'㎞/h</span>':''}</td><td>${esc(b.routenm)}${NO_GRP[String(b.routenm)]!==undefined&&NO_GRP[String(b.routenm)]!==g?' <span class="warnc" title="배정과 다른 노선">≠</span>':''}</td><td style="color:#888">${m?m.ts:''}</td></tr>`;});
+  h+=commFail?'<tr class="sechead"><td colspan="6" class="warnc">⚠ 수신 실패 — 아래 '+idle.length+'대는 확인 불가(대기로 단정 불가)</td></tr>'
+             :'<tr class="sechead"><td colspan="6">미포착 '+idle.length+'대 (선택 노선 배정 차량 중 신호 없음 — 차고지 대기·검사·타노선 투입 등)</td></tr>';
+  idle.forEach(([v4,g])=>{const ls=lastSeen[v4];
+    h+=`<tr class="clk${v4===hlVeh?' sel':''}" data-v="${v4}"><td><span class="co" style="background:#9aa4ad"></span>${v4}</td><td>${g}</td><td class="idle">${commFail?'확인불가':'미포착'}</td><td class="idle">${ls?'마지막 '+ls.t+' '+esc(ls.nodenm):'-'}</td><td class="idle">${ls?esc(ls.routenm):'-'}</td><td></td></tr>`;});
+  $('fleetB').innerHTML=h;
+  $('fleetB').querySelectorAll('tr.clk').forEach(tr=>tr.onclick=()=>{hlVeh=tr.dataset.v;$('veh').value=hlVeh in VEH_GRP?hlVeh:'';
+    if(tr.dataset.lat){map.setLevel(4);map.panTo(new kakao.maps.LatLng(+tr.dataset.lat,+tr.dataset.lon));}else{map.setLevel(5);map.panTo(new kakao.maps.LatLng(DEPOT.lat,DEPOT.lon));}
+    refreshHighlight();renderFleet();});
+}
+function renderRoster(){
+  const co=curTab, rows=Object.entries(otherSeen).filter(([,o])=>o.co===co), today=new Date().toISOString().slice(0,10);
+  const live=rows.filter(r=>r[1].live===tickNo).sort((a,b)=>a[0].localeCompare(b[0])), old=rows.filter(r=>r[1].live!==tickNo).sort((a,b)=>(b[1].d+b[1].t).localeCompare(a[1].d+a[1].t));
+  let h='<tr class="sechead"><td colspan="5">🟢 지금 운행 중 '+live.length+'대</td></tr>';
+  live.forEach(([vn,o])=>{const e=vehMarks[vn];h+=`<tr class="clk${v4of(vn)===hlVeh?' sel':''}" data-vn="${vn}" ${e?`data-lat="${e.lat}" data-lon="${e.lon}"`:''}><td><span class="co" style="background:${CO_COL[co]}"></span><b>${v4of(vn)}</b></td><td class="run">운행</td><td>${esc(o.routenm)}</td><td>${esc(o.nodenm)}</td><td>${o.t}</td></tr>`;});
+  h+='<tr class="sechead"><td colspan="5">최근 포착 이력 '+old.length+'대 (이 기기에서 누적)</td></tr>';
+  old.forEach(([vn,o])=>{h+=`<tr><td><span class="co" style="background:#9aa4ad"></span>${v4of(vn)}</td><td class="idle">미포착</td><td class="idle">${esc(o.routenm)}</td><td class="idle">${esc(o.nodenm)}</td><td class="idle">${o.d===today?o.t:o.d}</td></tr>`;});
+  if(!rows.length) h='<tr><td colspan="5" style="color:#888;padding:14px">아직 포착된 '+co+' 차량이 없습니다. 노선을 [◎ 원주 모든 노선]으로 두면 자동 수집됩니다.</td></tr>';
+  $('rosterB').innerHTML=h;
+  $('rosterB').querySelectorAll('tr.clk').forEach(tr=>tr.onclick=()=>{hlVeh=v4of(tr.dataset.vn);if(tr.dataset.lat){map.setLevel(4);map.panTo(new kakao.maps.LatLng(+tr.dataset.lat,+tr.dataset.lon));}refreshHighlight();renderRoster();});
+}
+function renderLog(){
+  $('events').innerHTML=events.slice(0,60).map(ev=>`<div class="ev"><b>${ev.ts}</b> <span style="color:#c2185b;font-weight:700">${ev.v4}</span> ${esc(ev.type)} <span style="color:#666">${esc(ev.detail)}</span></div>`).join('')||'<div class="ev" style="color:#888">아직 이벤트가 없습니다. (차량이 처음 포착되면 "출발/포착", 장기 미수신이면 "입고 추정"으로 기록)</div>';
+  $('evCnt').textContent=events.length+'건';
+  const last=logRows.slice(-150).reverse();
+  $('logB').innerHTML=last.map(r=>`<tr><td>${r[0]}</td><td><span class="co" style="background:${CO_COL[r[2]]||'#607d8b'}"></span>${String(r[1]).slice(-4)}</td><td>${r[2]}</td><td>${esc(r[3])}</td><td>${esc(r[4])}</td><td>${r[5]}</td><td>${r[6]!==''?r[6]+'㎞/h':''}</td></tr>`).join('')||'<tr><td colspan="7" style="color:#888;padding:12px">[● 기록]을 누르면 갱신마다 위치가 여기에 쌓이고 CSV로 저장할 수 있습니다.</td></tr>';
+  $('logCnt').textContent=logRows.length+'행';
+}
+function setTab(t){curTab=t;document.querySelectorAll('#tabs .tab').forEach(el=>el.classList.toggle('on',el.dataset.t===t));
+  $('fleet').style.display=t==='daedo'?'':'none';$('roster').style.display=(t!=='daedo'&&t!=='log')?'':'none';$('log').style.display=t==='log'?'':'none';renderAll();}
+function csv(){
+  if(!logRows.length&&!events.length){alert('저장할 기록이 없습니다. [● 기록]을 켜두면 위치 기록이 쌓입니다.');return;}
+  let out='﻿구분,시각,차량번호,회사,노선,통과정류장,정류장순번,구간속도(km/h),비고\n';
+  events.slice().reverse().forEach(e=>{out+=['이벤트',e.ts,e.v4,'대도','','','','',e.type+' '+e.detail].map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')+'\n';});
+  logRows.forEach(r=>{out+=['위치',...r,''].map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')+'\n';});
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out],{type:'text/csv'}));const d=new Date();
+  a.download='관제기록_'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'_'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+'.csv';a.click();
+}
+
+/* ===================== 차량 검색 ===================== */
+async function vehSearch(){
+  const v4=$('veh').value; if(!v4){hlVeh='';refreshHighlight();renderAll();return;}
+  hlVeh=v4; refreshHighlight(); renderAll();
+  const cur=Object.values(vehMarks).find(e=>e.v4===v4);
+  if(cur){map.setLevel(4);map.panTo(new kakao.maps.LatLng(cur.lat,cur.lon));setLed('ok',v4+'호: '+cur.rt+'번 운행 중 | '+cur.nodenm);return;}
+  const g=VEH_GRP[v4]; const nos=(GRP_NOS[g]&&GRP_NOS[g].length)?[...GRP_NOS[g],...Object.keys(NO_GRP).filter(n=>!GRP_NOS[g].includes(n))]:Object.keys(NO_GRP);
+  setLed('','' +v4+'호 검색 중 (배정 '+g+')…');
+  const ids=[];nos.forEach(n=>(routes[n]||[]).forEach(id=>{if(isWonju(id))ids.push(id);}));
+  let hit=null;
+  await pool(ids,async rid=>{if(hit)return;const list=await api('BusLcInfoInqireService/getRouteAcctoBusLcList','cityCode='+CITY+'&routeId='+rid+'&numOfRows=100&pageNo=1');const h=(list||[]).find(b=>String(b.vehicleno).endsWith(v4));if(h&&!hit)hit=h;},12);
+  if(hit){map.setLevel(4);map.panTo(new kakao.maps.LatLng(+hit.gpslati,+hit.gpslong));setLed('ok',v4+'호: '+hit.routenm+'번 운행 중 | '+(hit.nodenm||'')+(NO_GRP[String(hit.routenm)]!==g?' (배정 '+g+'과 다른 노선 투입)':''));refresh();}
+  else{setLed('warn',v4+'호: 현재 운행 신호 없음 — 차고지 대기·검사·미운행 추정'+(lastSeen[v4]?' (마지막 포착 '+lastSeen[v4].t+' '+lastSeen[v4].nodenm+')':''));map.setLevel(5);map.panTo(new kakao.maps.LatLng(DEPOT.lat,DEPOT.lon));}
+}
+
+/* ===================== 타이머·초기화 ===================== */
+function setTimer(){
+  if(timer){clearInterval(timer);timer=null;}
+  let s=+$('ivl').value;
+  if(s>0&&targetRouteIds().length>12&&s<5) s=5;
+  if(s>0) timer=setInterval(()=>{if(!document.hidden)refresh();},s*1000);
+}
+function relayout(){if(map&&map.relayout)setTimeout(()=>map.relayout(),80);}
+function init(){
+  map=new kakao.maps.Map($('map'),{center:new kakao.maps.LatLng(37.3600,127.9500),level:8});
+  map.addControl(new kakao.maps.ZoomControl(),kakao.maps.ControlPosition.RIGHT);
+  window.addEventListener('resize',relayout);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
+  // 설정 복원
+  if(cfg.ivl!==undefined)$('ivl').value=String(cfg.ivl);
+  ['showPath','showStops','showRt'].forEach(k=>{if(cfg[k]!==undefined)$(k).checked=!!cfg[k];});
+  if(cfg.co)Object.keys(coFilter).forEach(k=>{if(cfg.co[k]!==undefined)coFilter[k]=!!cfg.co[k];});
+  // 회사 칩
+  const cc=$('coChips');
+  Object.entries(CO_COL).forEach(([co,col])=>{const s=document.createElement('span');s.className='chip'+(coFilter[co]?'':' off');s.innerHTML='<span class="cdot" style="background:'+col+'"></span>'+co;
+    s.onclick=()=>{coFilter[co]=!coFilter[co];s.classList.toggle('off',!coFilter[co]);resetAllMarks();if(lastVs)paint(lastVs,lastTs,{ok:1,err:0});saveCfg();};
+    cc.appendChild(s);});
+  // 차량 선택
+  const vs=$('veh');Object.entries(FLEET).forEach(([g,arr])=>{const og=document.createElement('optgroup');og.label=g+'번 배정';arr.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v+'호';og.appendChild(o);});vs.appendChild(og);});
+  ['r1','r2','r3'].forEach(id=>$(id).onchange=()=>{hlVeh='';$('veh').value='';resetAllMarks();updateLegend();drawPath();setTimer();saveCfg();refresh();});
+  $('veh').onchange=vehSearch;
+  $('ivl').onchange=()=>{setTimer();saveCfg();};
+  $('refresh').onclick=()=>refresh();
+  $('showPath').onchange=()=>{drawPath();saveCfg();};
+  $('showStops').onchange=()=>{drawPath();saveCfg();};
+  $('showRt').onchange=()=>{Object.values(vehMarks).forEach(e=>{const r=e.el.querySelector('.rt');if(r)r.style.display=$('showRt').checked?'':'none';});saveCfg();};
+  $('panelToggle').onclick=()=>{$('panel').classList.toggle('min');relayout();};
+  document.querySelectorAll('#tabs .tab').forEach(el=>el.onclick=()=>setTab(el.dataset.t));
+  $('recBtn').onclick=function(){rec=!rec;this.textContent=rec?'■ 기록 중지':'● 기록';this.classList.toggle('rec',rec);$('recState').textContent=rec?'●':'';if(rec)setTab('log');};
+  $('csvBtn').onclick=csv;
+  loadGH().then(()=>drawPath());
+  loadRoutes();
+}
+if(window.kakao&&kakao.maps){kakao.maps.load(init);} else {$('keywarn').style.display='flex';}
+</script>
+</body>
+</html>
