@@ -120,7 +120,7 @@
     <span class="rsel" id="qWrap" style="flex:0 1 auto;position:relative"><input type="text" id="q" placeholder="정류장명·차량번호 검색" autocomplete="off" style="padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;width:150px"><button id="qBtn">🔍</button><div id="qList"></div></span>
     <select id="veh"><option value="">차량 찾기(54대)</option></select>
     <select id="ivl">
-      <option value="3">3초</option><option value="5">5초</option><option value="10" selected>10초</option>
+      <option value="3">3초</option><option value="5" selected>5초</option><option value="10">10초</option>
       <option value="15">15초</option><option value="30">30초</option><option value="60">60초</option><option value="0">수동</option>
     </select>
     <button id="refresh">새로고침</button>
@@ -207,9 +207,11 @@ const $=id=>document.getElementById(id);
 let map=null, routes={}, routeMeta={}, paths=null, routeTimes=null;
 let stopData={}, stopOv=null;
 let lines=[], stopOvs=[], pathSeq=0, extCache={}, extApiOk=null;
+try{Object.assign(extCache,JSON.parse(localStorage.getItem('wj_ext_v1')||'{}'));}catch(e){} // 노선도 캐시 → 켜자마자 즉시 표시
+function saveExt(){try{const ks=Object.keys(extCache).slice(-40);const o={};ks.forEach(k=>o[k]=extCache[k]);localStorage.setItem('wj_ext_v1',JSON.stringify(o));}catch(e){}}
 let vehMarks={}, tickNo=0, hlVeh='';
 const SLOT_COL=['#c2185b','#00796b','#1565c0'];
-let timer=null, refreshing=false, commFail=false, partialFail=false, lastOkAt=null;
+let timer=null, refreshing=false, queuedRefresh=false, commFail=false, partialFail=false, lastOkAt=null;
 let lastVs=null, lastTs=null, spdCache={}, spdTick=0, lastPos={};
 let rec=false, logRows=[], events=[], lastSeen={}, seenAt={}, curTab='daedo';
 let otherSeen={}, cfg={};
@@ -232,7 +234,7 @@ async function pool(items,worker,limit){const q=[...items];let active=0;return n
 window.addEventListener('error',e=>{try{setLed('bad','오류: '+(e.message||'알 수 없는 오류'));}catch(_){}});
 
 /* ===================== API (초당 제한 준수·적응형) ===================== */
-let quotaHit=false, rateHit=0, rps=10, rpsClean=0;
+let quotaHit=false, rateHit=0, rps=12, rpsClean=0;
 const bucket={t:[]};
 async function rateSlot(){ // 초당 rps건 이하로 발사 간격 조절
   for(;;){const now=Date.now();bucket.t=bucket.t.filter(x=>now-x<1000);
@@ -245,7 +247,7 @@ async function api(path,params,retry=0){
   try{
     const t=await (await fetch(u)).text();
     if(t.includes('PER_SECOND_EXCEEDS')){ // 코드23: 초당 제한 → 감속 후 재시도
-      rateHit++; rps=Math.max(3,Math.floor(rps*0.6)); rpsClean=0;
+      rateHit++; rps=Math.max(5,Math.floor(rps*0.6)); rpsClean=0;
       if(retry<5){await new Promise(z=>setTimeout(z,500+retry*400));return api(path,params,retry+1);}
       return null;
     }
@@ -337,7 +339,7 @@ async function drawPathExt(){
         const j=JSON.parse(t);let it=j?.response?.body?.items?.item||[];if(!Array.isArray(it))it=[it];
         st=it.map(x=>({id:String(x.nodeid),no:x.nodeno,nm:x.nodenm,lat:+x.gpslati,lon:+x.gpslong,ord:+x.nodeord,ud:String(x.updowncd??'0')}))
             .filter(p=>p.lat>36&&p.lat<38.5).sort((a,b)=>a.ord-b.ord);
-        if(st.length) extCache[rid]=st; extApiOk=true;
+        if(st.length){extCache[rid]=st; saveExt();} extApiOk=true;
       }catch(e){st=[];}
     }
     if(my!==pathSeq||!st||!st.length) return;
@@ -410,7 +412,9 @@ function openStop(id){
 /* ===================== 조회 ===================== */
 function targetRouteIds(){const ids=[];selected().forEach(n=>(routes[n]||[]).forEach(id=>{if(isWonju(id)&&!ids.includes(id))ids.push(id);}));return ids;}
 async function refresh(){
-  if(refreshing||!Object.keys(routes).length) return; refreshing=true;
+  if(!Object.keys(routes).length) return;
+  if(refreshing){queuedRefresh=true;return;}
+  refreshing=true;
   try{
     const ids=targetRouteIds(); if(!ids.length){setLed('warn','노선을 선택하세요');return;}
     setLed(lastOkAt?'ok':'','조회 중… (계통 '+ids.length+'개)');
@@ -420,13 +424,13 @@ async function refresh(){
       if(list===null){err++;return;} ok++;
       list.forEach(b=>{if(b.vehicleno){b._rid=rid;buses[b.vehicleno]=b;}});
     },12);
-    if(rateHit===rateBefore){rpsClean++; if(rpsClean>=5&&rps<10){rps++;rpsClean=0;}}
+    if(rateHit===rateBefore){rpsClean++; if(rpsClean>=2&&rps<12){rps=Math.min(12,rps+2);rpsClean=0;}}
     commFail=(ok===0&&err>0); partialFail=(err>0&&ok>0);
     if(!commFail) lastOkAt=new Date();
     lastVs=Object.values(buses); lastTs=new Date();
     paint(lastVs,lastTs,{ok,err,rate:rateHit-rateBefore});
   }catch(e){setLed('bad','오류: '+e.message);}
-  finally{refreshing=false;}
+  finally{refreshing=false; if(queuedRefresh){queuedRefresh=false; refresh();}}
 }
 
 /* ===================== 마커 ===================== */
