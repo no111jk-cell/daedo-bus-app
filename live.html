@@ -12,6 +12,7 @@
     --daedo:#c2185b;--dongsin:#00796b;--jin:#e65100;--gong:#5e35b1;--etc:#607d8b}
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{height:100%}
+  @supports (height:100dvh){body{height:100dvh}}   /* 모바일 주소창에 아래가 가리는 문제 보정 */
   body{font-family:'Malgun Gothic','맑은 고딕',system-ui,sans-serif;color:var(--ink);background:var(--bg);height:100vh;display:flex;flex-direction:column;overflow:hidden}
   header{background:#fff;border-bottom:1px solid var(--line)}
   .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 12px}
@@ -217,7 +218,7 @@ const STALE_TICKS=3, DROP_TICKS=10, MAX_LOG=6000;
 /* ===================== 상태 ===================== */
 const $=id=>document.getElementById(id);
 let map=null, routes={}, routeMeta={}, paths=null, routeTimes=null;
-let stopData={}, stopOv=null;
+let stopData={}, stopAll={}, stopOv=null;   // stopAll: 내장 노선도 기반 전 정류장 색인(1,875곳) — 노선 선택과 무관하게 검색·조회용
 let lines=[], stopOvs=[], pathSeq=0, extCache={}, extApiOk=null, routeMapInfo=null;
 try{Object.assign(extCache,JSON.parse(localStorage.getItem('wj_ext_v2')||'{}'));}catch(e){} // 노선도 캐시(v2: 26.8.24 100-2·90 개편 반영)
 function saveExt(){try{const ks=Object.keys(extCache).filter(k=>!(routeMapInfo&&routeMapInfo.n&&extCache[k]&&extCache[k].__file)).slice(-40);const o={};ks.forEach(k=>o[k]=extCache[k]);localStorage.setItem('wj_ext_v2',JSON.stringify(o));}catch(e){}}
@@ -320,7 +321,9 @@ async function loadGH(){
   //   API 호출 없이 즉시 그림. 파일이 없으면 종전대로 실시간 API로 받음(기능 저하 없음).
   try{const rm=await get('routemap.json');let n=0;
     if(rm&&rm.routes){for(const rid in rm.routes){const raw=rm.routes[rid];if(!Array.isArray(raw)||!raw.length)continue;
-      const st=raw.map(a=>({id:String(a[0]),no:'',nm:String(a[1]),lat:+a[2],lon:+a[3],ord:+a[4],ud:String(a[5])}));st.__file=true;extCache[rid]=st;n++;}}
+      const st=raw.map(a=>({id:String(a[0]),no:'',nm:String(a[1]),lat:+a[2],lon:+a[3],ord:+a[4],ud:String(a[5])}));st.__file=true;extCache[rid]=st;n++;
+      const rno=(rm.meta&&rm.meta.routeno&&rm.meta.routeno[rid])||'';
+      st.forEach(p=>{const d=stopAll[p.id]||(stopAll[p.id]={nm:p.nm,lat:p.lat,lon:p.lon,rts:[]});d.rts.push({rid,ord:p.ord,ud:p.ud,routeNo:rno});});}}
     routeMapInfo={n,date:(rm&&rm.meta&&rm.meta.date)||''};
     try{updateLegend();}catch(e){}
   }catch(e){routeMapInfo={n:0,date:''};}
@@ -392,7 +395,7 @@ async function drawPathExt(){
 }
 function openStop(id){
   closeStop();
-  const d=stopData[id]; if(!d) return;
+  const d=stopData[id]||stopAll[id]; if(!d) return;   // 선택 노선에 없어도 내장 노선도 색인으로 조회
   const now=lastVs||[];
   let rows='';
   // 노선별: 순번·첫차/막차 + 실시간 접근 차량
@@ -400,6 +403,7 @@ function openStop(id){
   d.rts.forEach(r=>{const k=String(r.routeNo);(byNo[k]=byNo[k]||[]).push(r);});
   Object.entries(byNo).forEach(([no,arr])=>{
     const slotI=arr[0].slotI, m=routeMeta[arr[0].rid]||{};
+    const col=(slotI!==undefined?SLOT_COL[slotI]:'#607d8b');   // 미선택 노선은 회색 배지
     const t1=fmtT(m.st), t2=fmtT(m.et);
     // 이 정류장으로 접근 중인 차량(같은 계통 + 순번이 정류장 이전)
     const appr=[];
@@ -421,7 +425,7 @@ function openStop(id){
       const rt=(routeTimes[g]||[])[0];
       if(rt) tt='<span class="dim"> · 일 '+rt.trips+'회</span>';
     }
-    rows+='<div class="rline"><span class="rb" style="background:'+SLOT_COL[slotI]+'">'+esc(no)+'번</span> <span class="dim">순번 '+arr.map(r=>r.ord).join('·')+((t1&&t2)?' · 첫차 '+t1+' 막차 '+t2:'')+'</span>'+tt+'<br>'+ap+'</div>';
+    rows+='<div class="rline"><span class="rb" style="background:'+col+'">'+esc(no)+'번</span> <span class="dim">순번 '+arr.map(r=>r.ord).join('·')+((t1&&t2)?' · 첫차 '+t1+' 막차 '+t2:'')+'</span>'+tt+'<br>'+ap+'</div>';
   });
   const el=document.createElement('div');el.className='spop';
   el.innerHTML='<span class="x">×</span><h4>🚏 '+esc(d.nm)+(d.no?' <span class="dim">('+d.no+')</span>':'')+'</h4>'+rows+
@@ -681,10 +685,12 @@ function doSearch(){
   // 문자 → 정류장 검색 (선택 노선의 정류장 색인에서)
   const norm=x=>String(x).replace(/\s+/g,'');
   const nq=norm(q);
-  if(q!==qLast){qMatches=Object.entries(stopData).filter(([id,d])=>norm(d.nm).includes(nq)).map(([id])=>id);qIdx=-1;qLast=q;}
-  if(!qMatches.length){setLed('warn','"'+q+'" 정류장이 선택한 노선 경유 정류장에 없습니다 — 그 정류장을 지나는 노선을 선택해 주세요');return;}
+  if(q!==qLast){const seen={};qMatches=[];
+    [stopData,stopAll].forEach(src=>Object.entries(src).forEach(([id,d])=>{if(!seen[id]&&norm(d.nm).includes(nq)){seen[id]=1;qMatches.push(id);}}));
+    qIdx=-1;qLast=q;}
+  if(!qMatches.length){setLed('warn','"'+q+'" 정류장을 전 노선(179계통)에서 찾지 못했습니다');return;}
   qIdx=(qIdx+1)%qMatches.length;
-  const d=stopData[qMatches[qIdx]];
+  const d=stopData[qMatches[qIdx]]||stopAll[qMatches[qIdx]];
   map.setLevel(3);map.panTo(new kakao.maps.LatLng(d.lat,d.lon));
   openStop(qMatches[qIdx]);
   setLed('ok','정류장 "'+d.nm+'" ('+(qIdx+1)+'/'+qMatches.length+(qMatches.length>1?' — 다시 검색하면 다음 결과':'')+')');
@@ -709,13 +715,15 @@ function acUpdate(){
   const norm=x=>String(x).replace(/\s+/g,'');
   const nq=norm(q);
   const byName={};
-  Object.values(stopData).forEach(d=>{
+  const scan=(src,hasSlot)=>Object.values(src).forEach(d=>{
     if(!norm(d.nm).includes(nq)) return;
-    const e=byName[d.nm]||(byName[d.nm]={nm:d.nm,nos:new Set()});
-    d.rts.forEach(r=>e.nos.add(String(r.routeNo)+'|'+r.slotI));
+    const e=byName[d.nm]||(byName[d.nm]={nm:d.nm,nos:{}});
+    d.rts.forEach(r=>{const k=String(r.routeNo),si=(hasSlot&&r.slotI!==undefined)?r.slotI:'';
+      if(e.nos[k]===undefined||si!=='')e.nos[k]=si;});   // 같은 노선이면 선택 노선 색이 우선
   });
+  scan(stopAll,false); scan(stopData,true);   // 전 정류장(179계통) 대상 자동완성
   acItems=Object.values(byName).slice(0,8).map(e=>({nm:e.nm,
-    badges:[...e.nos].map(x=>{const[no,si]=x.split('|');return '<span class="rb" style="background:'+SLOT_COL[+si]+'">'+esc(no)+'</span>';}).join(' ')}));
+    badges:Object.entries(e.nos).map(([no,si])=>'<span class="rb" style="background:'+(si!==''?SLOT_COL[+si]:'#607d8b')+'">'+esc(no)+'</span>').join(' ')}));
   acIdx=-1;acRender();
 }
 
@@ -770,7 +778,95 @@ function init(){
   loadGH().then(()=>drawPath());
   loadRoutes();
 }
-if(window.kakao&&kakao.maps){kakao.maps.load(init);} else {$('keywarn').style.display='flex';}
+/* 임직원 배포용: 기록·CSV 숨김 — 주소 뒤에 ?admin 붙이면 표시(관리자용) */
+if(!/[?&]admin/.test(location.search)){
+  ['recBtn','csvBtn'].forEach(i=>{const e=document.getElementById(i);if(e)e.style.display='none';});
+  const lt=document.querySelector('.tab[data-t="log"]');if(lt)lt.style.display='none';
+}
+/* ── 접속코드(발급제) — 노무안전팀이 지급한 코드가 있어야 화면이 열림 ──
+   코드 원문은 이 파일에 없음(SHA-256 해시만 내장). 코드 회수 = 해당 해시 삭제 후 재업로드 */
+const GATE=[
+'2f975dc85eeab96eb1a89218b1d1cd622ac75750f82acebfaf4ea50418ac5fd9',
+'7df23115de09e394d30a7cc3d08bc0fb496b1a12643ca14dd8ef1745391caa83',
+'830766c476088eae7c8a4a9e8fd0021b799e8d5b6290f589e81a9f48bc3db234',
+'f6d26a40bda32602a068fbe61d8f9864ea330df839043ec92569dc2527d9f77d',
+'a73d6b38204103cc7455b9180a4693a382397cffd9e5753d019f6d1d1da31cd1',
+'c97a27297d0c5c21f3a4e20443d243ec07628cf93a25d096673c9f1b4cb82b57',
+'6d32c43303c70099402c72744bb49c4b461b7871a1a359a99ccbcc99aa1d1d3c',
+'4cefa59840f797266cb61b350772698a9e00c4e9665bd7cee02cf242e835e38d',
+'6b18c84b102f9174b1359960a9c48f4fccb0f9a0324c6efbc7c883a393399c11',
+'fd75523c074f992bbaa1c3a923037ebe264e0d938a4df3717618029ea9c3b857',
+'c7af9f615049081f828a619bae2468f37704811fb9c39027f51b3404e7061806',
+'f5b5d5ac55957358967b1215612f0b3f0efcd2e9e7f4f2d3483aed5647aeb603',
+'ef24c0268982ee2c47d1f1871aad324776782b677b8277b188379ae1b1bc6dc2',
+'c9ca890311e8ec56ce46eb17e1277de3638d42eea4f43c68e36542fcf45ce8de',
+'6cf716f945b6c5efff4fc6d0cb68b5d15c4735f021ab7098553cbfd2218215fe',
+'b9c91f98541acbe2ce05e6d2333f2df99a079c3bd8cb1bfaec91e5b690e2d054',
+'152080a55a8614451e3a0efb4dc7fa8f984f9d951c9398d4f6f1db18d79393d2',
+'5f09a409370828e760232c3935acfdb0d7a1c7b713998766a55b9999f0945276',
+'fd0eff4ede72da01f73542490487742c866738880ba0d59837457a5f1cd2515f',
+'a6f5cd13c40ce9d4c024c3430ab2f6b78a04e8236a11ca63ae4273c70933bc46',
+'765ef998785a3708ea8c26eb454f13eef53816a4e391b517ecf9e5c023fb39d8',
+'a06e687ea6f8c888bf08dadb54484f6be15c528da3f5f08330704be3c8454dec',
+'fec6d425a1141268e10513034826e5e5c35f59c00d5ea43e6a15cffee8a9def6',
+'0b5e7d428ffb2d05a84b14ce1aaabef9775798f902b95ab9495578d229f21e14',
+'ee6af57f4aeaf0cd5ffa4c9798ea616d888b558615b2063e4da6e580966a53a0',
+'99f902760c8bc284268a80ca9aeb634be83e8bd7810b6d116cd13295c61097aa',
+'451b00dcb4cd360a19d448d13848853e3019194c0de2a53e9c22de6c761b8e09',
+'123bf4954c351f774ec8680503be09c57f6c1270a46140378bdbe2a6650211e6',
+'905aec87ac3cd5e44f2c0206cb1ceaaa9fe95b5420a62030f3f8974d72a4583a',
+'6329e75643d753e92242c17baffcb9e9045b8b6373a004a838d73b5704883550',
+'0a40c01b0940d4cf26198ba22aa6831fbdb0c2c8d059a4eb54e110d423819e70',
+'1ddb2df03a1437a2317b972dbbb9d58f2d73091ce898df7cbd724cd7212c77c0',
+'54550d6cf11ef1cd627ef6556c1e98d3570888cd9668da30766703546c9c4576',
+'2cad2543e310c32b7e527efaa080f3743010074105144a1a061fd7b34a92b643',
+'fdb11797df1e1726ddd55562e6bc0474ef96f3d8327c0a330590fdc71b156008',
+'6383b4e1e007e3be9d094d9fde1e2af62254129b33e6aef2d0a957eeeec8f724',
+'a36ab703065c4d269ed8649ceb4164de6b360ad0b26454236de4fbcadda3d034',
+'00b7e41944c97b2fadc09757e6e3a4687d2e8e56f0822f37a9e95826c3c6fc3f',
+'2750cfcabe627840fa51ecd303c9da89b4dfed4300b9eb8ea804d17e22339e90',
+'4f6727ec32f95d1ecb5b6dd96fe70fe847af61b00d568781b61f20bf77254f6e'
+];
+const GURL='https://script.google.com/macros/s/AKfycbzEa8g20M5wUyNpn_ns8e8J16dDninPLlnFNoFKAlTk_4B3kz7QRGlOx45mwZzTOS_t/exec';   // 접속관리 구글시트(기록·기기제한·즉시차단)
+function devId(){let d='';try{d=localStorage.getItem('wj_dev')||'';}catch(e){}
+  if(!d){d=Date.now().toString(36)+Math.random().toString(36).slice(2,10);try{localStorage.setItem('wj_dev',d);}catch(e){}}
+  return d;}
+async function sha(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}
+async function gateOk(c){   // {ok,msg} — ① 구글시트에서 확인(기록 남음) ② 시트 무응답 시에만 내장 해시로 판정
+  c=String(c||'').trim().toUpperCase(); if(!c)return {ok:false,msg:''};
+  try{
+    const ctl=new AbortController(); const tm=setTimeout(()=>ctl.abort(),9000);
+    const r=await fetch(GURL+'?c='+encodeURIComponent(c)+'&d='+encodeURIComponent(devId())+'&i='+encodeURIComponent(navigator.userAgent.slice(0,110)),{signal:ctl.signal});
+    clearTimeout(tm);
+    const j=await r.json();
+    if(j&&typeof j.ok==='boolean')return {ok:j.ok,msg:j.msg||'코드가 올바르지 않습니다.'};
+  }catch(e){}
+  try{return {ok:GATE.includes(await sha(c)),msg:'코드가 올바르지 않습니다. 노무안전팀에 문의하세요.'};}catch(e){return {ok:false,msg:'확인에 실패했습니다. 잠시 후 다시 시도해 주세요.'};}
+}
+function boot(){if(window.kakao&&kakao.maps){kakao.maps.load(init);} else {$('keywarn').style.display='flex';}}
+(async()=>{
+  if(!(window.crypto&&crypto.subtle)||location.protocol==='file:'){boot();return;}   // 로컬 파일 테스트는 통과
+  let c='';try{c=localStorage.getItem('wj_gate')||'';}catch(e){}
+  if(c&&(await gateOk(c)).ok){boot();return;}
+  const g=document.createElement('div');
+  g.style.cssText='position:fixed;inset:0;z-index:9999;background:#f0f2f5;display:flex;align-items:center;justify-content:center;padding:20px';
+  g.innerHTML='<div style="background:#fff;border:1px solid #dde;border-radius:12px;padding:26px 24px;max-width:330px;width:100%;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.12)">'
+   +'<div style="font-size:30px">🚌</div><h2 style="font-size:16px;margin:8px 0 4px">대도여객 실시간 관제</h2>'
+   +'<p style="font-size:12px;color:#667;line-height:1.6;margin-bottom:12px">임직원 전용 화면입니다.<br>노무안전팀에서 받은 <b>접속코드</b>를 입력하세요.</p>'
+   +'<input id="gc" style="width:100%;padding:10px;border:1px solid #bcc5d0;border-radius:8px;font-size:16px;text-align:center;letter-spacing:3px;text-transform:uppercase" maxlength="8" placeholder="접속코드" autocomplete="off">'
+   +'<button id="gb" style="width:100%;margin-top:10px;padding:10px;border:none;border-radius:8px;background:#c2185b;color:#fff;font-weight:700;font-size:14px;cursor:pointer">입장</button>'
+   +'<p id="gm" style="font-size:11px;color:#c0392b;height:14px;margin-top:6px"></p>'
+   +'<p style="font-size:10.5px;color:#99a;line-height:1.5;margin-top:4px">본 화면과 접속코드는 회사 내부용입니다.<br>외부(타인·타사) 제공을 금합니다.</p></div>';
+  document.body.appendChild(g);
+  const go=async()=>{const v=g.querySelector('#gc').value,bt=g.querySelector('#gb');
+    g.querySelector('#gm').textContent='';bt.disabled=true;bt.textContent='확인 중…';
+    const rs=await gateOk(v);
+    bt.disabled=false;bt.textContent='입장';
+    if(rs.ok){try{localStorage.setItem('wj_gate',String(v).trim().toUpperCase());}catch(e){}g.remove();boot();}
+    else g.querySelector('#gm').textContent=rs.msg||'코드가 올바르지 않습니다. 노무안전팀에 문의하세요.';};
+  g.querySelector('#gb').onclick=go;
+  g.querySelector('#gc').addEventListener('keydown',e=>{if(e.key==='Enter')go();});
+})();
 </script>
 </body>
 </html>
