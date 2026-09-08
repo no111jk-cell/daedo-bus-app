@@ -157,7 +157,7 @@
       <span class="sq" style="background:var(--jin)"></span>진평(10·11××)
       <span class="sq" style="background:var(--gong)"></span>공영(2×××)
       <span class="sq" style="background:var(--etc)"></span>기타 &nbsp;｜ 노선도: <span id="legRoutes"></span><br>
-      <span style="color:#777">▲ 진행방향(추정) · 점선/반투명 = 신호 지연 · 위치는 BIS 정류장 통과 기준</span>
+      <span style="color:#777">▲ 진행방향(추정) · 점선/반투명 = 신호 지연 · 위치는 BIS 정류장 통과 기준 · 정류장 점을 누르면 도착예정 표시</span>
     </div>
     <div id="keywarn"><div>지도를 불러오지 못했습니다.<br>인터넷 연결과 카카오디벨로퍼스 [카카오맵] 활성화 상태를 확인해 주세요.</div></div>
   </div>
@@ -430,6 +430,31 @@ function openStop(id){
   stopOv=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(d.lat,d.lon),content:el,yAnchor:1.12,zIndex:30,clickable:true});
   stopOv._sid=id;
   stopOv.setMap(map);
+  loadArrivals(id,el);
+}
+/* ── 도착예정(국토부 TAGO 버스도착정보 · 시청 안내기와 같은 값) — 정류장 창 열 때 1회 조회 ── */
+let arvCache={};
+async function loadArrivals(id,el){
+  const box=document.createElement('div');
+  box.style.cssText='margin-top:6px;border-top:1px dashed var(--line);padding-top:5px;font-size:11px';
+  el.insertBefore(box,el.lastElementChild);
+  const c=arvCache[id];
+  if(c&&Date.now()-c.t<20000){box.innerHTML=c.html;return;}   // 20초 안 재클릭은 재사용
+  box.innerHTML='<span class="dim">⏱ 도착예정 불러오는 중…</span>';
+  const it=await api('ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList','cityCode='+CITY+'&nodeId='+id+'&numOfRows=40&pageNo=1');
+  if(!stopOv||stopOv._sid!==id) return;                        // 그 사이 다른 정류장을 열었으면 버림
+  let html;
+  if(it===null) html='<span class="dim">⏱ 도착예정 응답 없음 — 잠시 후 다시 눌러 보세요</span>';
+  else if(!it.length) html='<span class="dim">⏱ 지금 도착예정으로 잡힌 버스 없음</span>';
+  else{
+    it.sort((a,b)=>(+a.arrtime)-(+b.arrtime));
+    html='<b>⏱ 도착예정</b> <span class="dim">(시청 안내기와 같은 값)</span><br>'+it.slice(0,6).map(a=>{
+      const m=Math.round((+a.arrtime)/60), t=m<=0?'곧 도착':(m+'분 뒤');
+      return '<span class="app">'+esc(String(a.routeno))+'번</span> <b>'+t+'</b> <span class="dim">· '+(+a.arrprevstationcnt)+'정류장 전'+(a.vehicletp&&String(a.vehicletp).indexOf('저상')>=0?' · 저상':'')+'</span>';
+    }).join('<br>');
+  }
+  arvCache[id]={t:Date.now(),html};
+  box.innerHTML=html;
 }
 
 /* ===================== 조회 ===================== */
