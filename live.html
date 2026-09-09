@@ -166,7 +166,7 @@
       <span class="sq" style="background:var(--dongsin)"></span>동신(15·16·70××)
       <span class="sq" style="background:var(--jin)"></span>진평(10·11××)
       <span class="sq" style="background:var(--gong)"></span>공영(2×××)
-      <span class="sq" style="background:var(--etc)"></span>기타 &nbsp;｜ 대도 차종: <span class="sq" style="background:#0277bd"></span><b>H₂</b> 수소전기 19대 <span class="sq" style="background:#c2185b"></span><b>CNG</b> 35대 &nbsp;｜ 동신 차종: <span class="fu fu-H2">H₂</span> 13대 <span class="fu fu-CNG">CNG</span> 55대 &nbsp;｜ 노선도: <span id="legRoutes"></span><br>
+      <span class="sq" style="background:var(--etc)"></span>기타 &nbsp;｜ 대도 차종: <span class="sq" style="background:#0277bd"></span><b>H₂</b> 수소전기 19대 <span class="sq" style="background:#c2185b"></span><b>CNG</b> 35대 &nbsp;｜ 동신 차종: <span class="fu fu-H2">H₂</span> 13대 <span class="fu fu-CNG">CNG</span> 55대 &nbsp;｜ 진평 차종: <span class="fu fu-CNG">CNG</span> 23대(전량) &nbsp;｜ 노선도: <span id="legRoutes"></span><br>
       <span style="color:#777">▲ 진행방향(추정) · 점선/반투명 = 신호 지연 · 위치는 BIS 정류장 통과 기준 · 정류장 점을 누르면 도착예정 표시</span>
     </div>
     <div id="keywarn"><div>지도를 불러오지 못했습니다.<br>인터넷 연결과 카카오디벨로퍼스 [카카오맵] 활성화 상태를 확인해 주세요.</div></div>
@@ -226,7 +226,11 @@ const FUEL={};FUEL_H2.forEach(v=>FUEL[v]='H2');Object.values(FLEET).flat().forEa
 const FUEL_DS_H2=['1536', '1537', '1553', '1562', '1563', '1566', '1572', '1577', '1582', '1583', '1585', '1601', '1602'];
 const FUEL_DS_ALL=['1503', '1509', '1512', '1518', '1519', '1523', '1524', '1526', '1529', '1530', '1531', '1533', '1534', '1536', '1537', '1543', '1546', '1547', '1549', '1552', '1553', '1554', '1556', '1559', '1561', '1562', '1563', '1564', '1565', '1566', '1568', '1569', '1572', '1573', '1574', '1577', '1578', '1579', '1581', '1582', '1583', '1584', '1585', '1586', '1587', '1588', '1589', '1590', '1591', '1592', '1593', '1594', '1595', '1596', '1597', '1598', '1599', '1600', '1601', '1602', '7012', '7013', '7014', '7015', '7016', '7017', '7018', '7019'];
 const FUEL_DS={};FUEL_DS_ALL.forEach(v=>FUEL_DS[v]='CNG');FUEL_DS_H2.forEach(v=>FUEL_DS[v]='H2');
-function fuelOf(co,v4){return co==='대도'?FUEL[v4]:(co==='동신'?FUEL_DS[v4]:null);}
+/* ===== 진평교통(구.태창운수) 차종 — 근거: 개인 블로그 '원주 진평교통 차량현황' 2026.3.6 기준
+   (공식 문서 아님 / 총 23대·전차량 CNG·수소 0대 자체 대조 일치 확인) */
+const FUEL_JP_ALL=['1003', '1005', '1006', '1012', '1013', '1017', '1018', '1021', '1024', '1029', '1031', '1032', '1040', '1064', '1078', '1084', '1087', '1104', '1106', '1107', '1108', '1109', '1110'];
+const FUEL_JP={};FUEL_JP_ALL.forEach(v=>FUEL_JP[v]='CNG');
+function fuelOf(co,v4){return co==='대도'?FUEL[v4]:(co==='동신'?FUEL_DS[v4]:(co==='진평'?FUEL_JP[v4]:null));}
 const FUEL_COL={H2:'#0277bd',CNG:'#c2185b'};
 const FUEL_LABEL={H2:'H\u2082',CNG:'CNG'};
 const FUEL_NAME={H2:'\uc218\uc18c\uc804\uae30',CNG:'CNG'};
@@ -647,7 +651,9 @@ function fuelPanelHtml(){
     +'<div class="fr" style="border-top:1px solid #e6e9ee;padding-top:6px"><div><div class="ttl">\ub3d9\uc2e0\uc6b4\uc218 68\ub300 '
     +'<span class="fu fu-H2">H\u2082</span> '+FUEL_DS_H2.length+'\ub300 / <span class="fu fu-CNG">CNG</span> '+(FUEL_DS_ALL.length-FUEL_DS_H2.length)+'\ub300</div>'
     +'<div class="nos"><b>\uc218\uc18c\uc804\uae30</b> '+FUEL_DS_H2.join(', ')+'</div></div></div>'
-    +'<div class="nos">\u203b \uadfc\uac70: \u300c\ub300\ub3c4\uc5ec\uac1d_\ucc28\ub7c9\uad00\ub9ac\ub300\uc7a5_\ud1b5\ud569.xlsx\u300d \ucc28\ub7c9\ucd1d\uad04 \uc2dc\ud2b8 \u2018\uc5f0\ub8cc\u2019 \ud56d\ubaa9 / \ub3d9\uc2e0\uc740 \uc678\ubd80 \uacf5\uac1c\uc790\ub8cc(2026.8.24. \uae30\uc900, \ube44\uacf5\uc2dd)</div>';
+    +'<div class="fr"><div><div class="ttl">\uc9c4\ud3c9\uad50\ud1b5 '+FUEL_JP_ALL.length+'\ub300 '
+    +'<span class="fu fu-CNG">CNG</span> \uc804\ub7c9 (\uc218\uc18c\ucc28 \uc5c6\uc74c)</div></div></div>'
+    +'<div class="nos">\u203b \uadfc\uac70: \u300c\ub300\ub3c4\uc5ec\uac1d_\ucc28\ub7c9\uad00\ub9ac\ub300\uc7a5_\ud1b5\ud569.xlsx\u300d \ucc28\ub7c9\ucd1d\uad04 \uc2dc\ud2b8 \u2018\uc5f0\ub8cc\u2019 \ud56d\ubaa9 / \ub3d9\uc2e0\u00b7\uc9c4\ud3c9\uc740 \uc678\ubd80 \uacf5\uac1c\uc790\ub8cc(\ub3d9\uc2e0 2026.8.24. / \uc9c4\ud3c9 2026.3.6. \uae30\uc900, \ube44\uacf5\uc2dd)</div>';
 }
 function toggleFuelPanel(){
   const p=document.getElementById('fuelPanel');
