@@ -1,0 +1,910 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#c2185b">
+<meta name="mobile-web-app-capable" content="yes">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚌</text></svg>">
+<title>대도여객 실시간 관제</title>
+<style>
+  :root{--ink:#1a1d21;--ink2:#5a6068;--line:#e2e5e9;--bg:#f7f8fa;
+    --daedo:#c2185b;--dongsin:#00796b;--jin:#e65100;--gong:#5e35b1;--etc:#607d8b}
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  @supports (height:100dvh){body{height:100dvh}}   /* 모바일 주소창에 아래가 가리는 문제 보정 */
+  body{font-family:'Malgun Gothic','맑은 고딕',system-ui,sans-serif;color:var(--ink);background:var(--bg);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  header{background:#fff;border-bottom:1px solid var(--line)}
+  .row{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:6px 12px}
+  .row+.row{padding-top:0}
+  h1{font-size:15px;font-weight:700;margin-right:6px;white-space:nowrap}
+  select,button{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;background:#fff;max-width:100%}
+  .rsel{display:inline-flex;align-items:center;gap:3px}
+  .rdot{width:10px;height:10px;border-radius:50%;display:inline-block;flex:none}
+  .rsel select{max-width:230px}
+  button{cursor:pointer;font-weight:700}
+  button.rec{background:#c0392b;color:#fff;border-color:#c0392b}
+  label.tg{font-size:12px;display:inline-flex;align-items:center;gap:3px;padding:4px 6px;border-radius:6px;background:#f4f6f8;cursor:pointer;white-space:nowrap}
+  .chip{display:inline-flex;align-items:center;gap:4px;padding:4px 9px;border:1px solid #9db2c9;border-radius:20px;cursor:pointer;font-size:12px;background:#eef2f7;font-weight:700;user-select:none;white-space:nowrap}
+  .chip.off{background:#fff;border-color:#e2e5e9;opacity:.45}
+  .cdot{width:9px;height:9px;border-radius:50%;display:inline-block}
+  #led{width:10px;height:10px;border-radius:50%;background:#bbb;display:inline-block;margin-right:5px;box-shadow:0 0 0 2px #fff inset}
+  #led.ok{background:#2ecc71}#led.warn{background:#f1c40f}#led.bad{background:#e74c3c;animation:blink 1s infinite}
+  @keyframes blink{50%{opacity:.3}}
+  #status{font-size:12px;color:var(--ink2);flex:1;min-width:160px}
+  #wrap{flex:1;display:flex;min-height:0}
+  .maparea{position:relative;flex:1;display:flex}
+  #map{flex:1}
+  #legend{position:absolute;left:10px;bottom:24px;z-index:3;background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:11px;line-height:1.7}
+  .sq{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px}
+  #schedOv{position:absolute;right:10px;top:10px;z-index:5;background:rgba(255,255,255,.98);border:1px solid var(--line);border-radius:10px;box-shadow:0 3px 12px rgba(0,0,0,.2);width:250px;max-height:72%;display:flex;flex-direction:column;font-size:12px}
+  #schedOv .sh{padding:8px 10px;border-bottom:1px solid var(--line);font-weight:700;display:flex;align-items:center;gap:6px}
+  #schedOv .sx{margin-left:auto;cursor:pointer;color:#888;font-weight:700;padding:0 4px}
+  #schedOv .sn{padding:5px 10px;font-size:10.5px;color:#a33;border-bottom:1px solid var(--line);background:#fff7f5}
+  #schedOv .sb{overflow-y:auto;display:flex;gap:0}
+  #schedOv .sc{flex:1;padding:6px 0}
+  #schedOv .sc h4{font-size:11px;color:var(--ink2);text-align:center;padding-bottom:4px;border-bottom:1px solid #f0f1f3;margin:0 6px 4px}
+  #schedOv .tt{text-align:center;padding:1.5px 0;color:var(--ink)}
+  #schedOv .tt.past{color:#b6bcc4}
+  #schedOv .tt.next{font-weight:800;color:#c2185b;background:#fdeef4;border-radius:4px;margin:0 10px}
+  #legend .schBtn{cursor:pointer;text-decoration:underline dotted;text-underline-offset:2px}
+  @media (max-width:820px){#schedOv{width:46%;max-height:60%;font-size:11px}}
+  #keywarn{position:absolute;inset:0;display:none;align-items:center;justify-content:center;background:#f0f2f5;z-index:5;text-align:center;font-size:14px;line-height:2;color:#555}
+  .bus{position:relative;border-radius:6px;color:#fff;font-weight:700;font-size:11px;padding:2px 6px;box-shadow:0 1px 4px rgba(0,0,0,.5);white-space:nowrap;border:1.5px solid #fff;cursor:pointer;display:flex;align-items:center;gap:3px;transition:opacity .4s}
+  .bus .rt{border-radius:4px;padding:0 4px;font-size:9.5px;font-weight:700;border:1px solid rgba(255,255,255,.8)}
+  .bus .fu{border-radius:4px;padding:0 4px;font-size:9px;font-weight:800;letter-spacing:-.2px;border:1px solid rgba(255,255,255,.9);line-height:1.45}
+  .fu-H2{background:#e0f7fa;color:#00565c}
+  .fu-CNG{background:#fff8e1;color:#b34700}
+  #fuelPanel{display:none;padding:8px 10px;border-bottom:1px solid #e6e9ee;background:#fafbfc}
+  #fuelPanel .fr{display:flex;align-items:center;gap:10px;margin-bottom:6px}
+  #fuelPanel img{height:52px;width:auto}
+  #fuelPanel .ttl{font-weight:700;font-size:12px}
+  #fuelPanel .nos{font-size:10.5px;color:#666;line-height:1.5;word-break:break-all}
+  .fuBtn{cursor:pointer;font-size:11px;color:#1565c0;text-decoration:underline;margin-left:6px}
+  .bus .ar{display:inline-block;width:0;height:0;border-left:4px solid transparent;border-right:4px solid transparent;border-bottom:8px solid #fff;transform-origin:50% 60%}
+  .bus.hl{outline:3px solid #ffd600;outline-offset:1px;z-index:99}
+  .bus.stale{opacity:.5;border-style:dashed}
+  .stopwrap{width:28px;height:28px;display:flex;align-items:center;justify-content:center;cursor:pointer;border-radius:50%}
+  .stopwrap:hover .stopdot{transform:scale(1.5)}
+  .stopdot{width:10px;height:10px;border-radius:50%;background:#fff;transition:transform .12s;pointer-events:none}
+  .spop{background:#fff;border:1px solid #888;border-radius:9px;padding:9px 11px;font-size:11.5px;line-height:1.55;box-shadow:0 2px 10px rgba(0,0,0,.3);min-width:190px;max-width:250px;position:relative;font-family:inherit;color:#1a1d21}
+  .spop h4{font-size:12.5px;margin-bottom:3px;padding-right:14px}
+  .spop .x{position:absolute;top:5px;right:8px;cursor:pointer;color:#888;font-weight:700}
+  .spop .rline{margin-top:2px}
+  .spop .rb{display:inline-block;border-radius:4px;color:#fff;font-weight:700;padding:0 5px;font-size:10.5px}
+  .spop .app{color:#1e8449;font-weight:700}
+  .spop .dim{color:#777}
+  #qList{display:none;position:absolute;top:100%;left:0;right:0;margin-top:3px;background:#fff;border:1px solid #9db2c9;border-radius:8px;box-shadow:0 4px 14px rgba(0,0,0,.18);z-index:60;max-height:260px;overflow-y:auto}
+  #qList .qi{padding:8px 10px;font-size:12.5px;cursor:pointer;border-bottom:1px solid #f0f1f3;display:flex;align-items:center;gap:6px}
+  #qList .qi:last-child{border-bottom:none}
+  #qList .qi:hover,#qList .qi.on{background:#eef4fb}
+  #qList .qi .rb{display:inline-block;border-radius:4px;color:#fff;font-weight:700;padding:0 5px;font-size:10px}
+  #panel{width:420px;background:#fff;border-left:1px solid var(--line);display:flex;flex-direction:column;min-height:0}
+  .ptit{padding:6px 12px;border-bottom:1px solid var(--line);font-size:12.5px;font-weight:700;background:#f8f9fa;display:flex;justify-content:space-between;align-items:center}
+  #kpi{display:flex;gap:5px;padding:7px 9px;border-bottom:1px solid var(--line);background:#fff}
+  .kb{flex:1;text-align:center;border:1px solid var(--line);border-radius:8px;padding:4px 2px}
+  .kb b{font-size:17px;display:block;line-height:1.2}
+  .kb span{font-size:10px;color:var(--ink2)}
+  #tabs{display:flex;border-bottom:1px solid var(--line);background:#f8f9fa}
+  .tab{flex:1;text-align:center;padding:8px 2px;font-size:12.5px;cursor:pointer;border-bottom:2px solid transparent;user-select:none;white-space:nowrap}
+  .tab.on{font-weight:700;border-bottom-color:#c2185b;background:#fff}
+  #tabBody{flex:1;overflow:auto;font-size:11.5px;-webkit-overflow-scrolling:touch}
+  table{border-collapse:collapse;width:100%;font-size:11.5px}
+  th,td{padding:4px 7px;border-bottom:1px solid #f0f1f3;text-align:left;white-space:nowrap}
+  th{position:sticky;top:0;background:#f4f6f8;font-size:11px;z-index:1}
+  .sechead td{background:#f1f4f7;font-weight:700;color:#444;font-size:11px;padding:5px 8px}
+  .co{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:3px}
+  .run{color:#1e8449;font-weight:700}.idle{color:#999}.warnc{color:#c0392b;font-weight:700}
+  tr.clk{cursor:pointer}tr.clk:hover{background:#f4f7fa}tr.sel{background:#fff8d6}
+  .ev{padding:5px 10px;border-bottom:1px solid #f0f1f3;font-size:11.5px}
+  .ev b{margin-right:4px}
+  #panelToggle{display:none}
+  #hdrToggle{display:none}
+  #topbar{flex-wrap:nowrap}
+  @media (max-width:820px){
+    .row{padding:5px 8px;gap:5px}
+    h1{font-size:14px}
+    select,button{padding:8px 9px;font-size:13px}
+    .rsel{flex:1 1 100%}.rsel select{flex:1;max-width:100%}
+    #q{flex:1;width:auto!important}
+    #qList{max-height:46vh}
+    .tab{padding:11px 2px;font-size:13px}
+    #wrap{flex-direction:column}
+    #panel{width:100%;height:46%;border-left:none;border-top:1px solid var(--line)}
+    #panel.min{height:auto}
+    #panel.min #kpi,#panel.min #tabs,#panel.min #tabBody{display:none}
+    #panelToggle{display:inline-block}
+    #legend{font-size:10px;left:6px;bottom:6px;max-width:80%;line-height:1.5}
+    th,td{padding:7px 7px}
+    .stopwrap{width:38px;height:38px}
+    .bus{padding:5px 8px;font-size:12px}
+    .stopdot{width:12px;height:12px}
+    #status{min-width:0;flex:1;overflow:hidden}
+    #stxt{display:inline-block;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;vertical-align:middle}
+    #hdrToggle{display:inline-block;flex:none;padding:7px 11px}
+    #hdrBody{display:none}
+    #hdrBody.open{display:block;border-top:1px solid var(--line)}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="row" id="topbar">
+    <h1>대도여객 실시간 관제</h1>
+    <span id="status"><span id="led"></span><span id="stxt">준비 중...</span></span>
+    <button id="hdrToggle">☰ 메뉴</button>
+  </div>
+  <div id="hdrBody">
+  <div class="row">
+    <span class="rsel"><span class="rdot" style="background:#c2185b"></span><select id="r1"><option value="">노선 수집 중...</option></select></span>
+    <span class="rsel"><span class="rdot" style="background:#00796b"></span><select id="r2"><option value="">+ 노선 2</option></select></span>
+    <span class="rsel"><span class="rdot" style="background:#1565c0"></span><select id="r3"><option value="">+ 노선 3</option></select></span>
+    <span class="rsel" id="qWrap" style="flex:0 1 auto;position:relative"><input type="text" id="q" placeholder="정류장명·차량번호 검색" autocomplete="off" style="padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-size:12.5px;font-family:inherit;width:150px"><button id="qBtn">🔍</button><div id="qList"></div></span>
+    <select id="veh"><option value="">차량 찾기(54대)</option></select>
+    <select id="ivl">
+      <option value="3">3초</option><option value="5" selected>5초</option><option value="10">10초</option>
+      <option value="15">15초</option><option value="30">30초</option><option value="60">60초</option><option value="0">수동</option>
+    </select>
+    <button id="refresh">새로고침</button>
+  </div>
+  <div class="row">
+    <label class="tg"><input type="checkbox" id="showPath" checked> 노선도</label>
+    <label class="tg"><input type="checkbox" id="showStops"> 정류장</label>
+    <label class="tg"><input type="checkbox" id="showRt" checked> 라벨에 노선</label>
+    <label class="tg"><input type="checkbox" id="follow"> 선택차량 따라가기</label>
+    <button id="recBtn">● 기록</button>
+    <button id="csvBtn">CSV</button>
+    <span id="coChips" style="display:inline-flex;gap:4px;flex-wrap:wrap"></span>
+  </div>
+  </div>
+</header>
+<div id="wrap">
+  <div class="maparea">
+    <div id="map"></div>
+    <div id="legend">
+      <span class="sq" style="background:var(--daedo)"></span>대도(13××)
+      <span class="sq" style="background:var(--dongsin)"></span>동신(15·16·70××)
+      <span class="sq" style="background:var(--jin)"></span>진평(10·11××)
+      <span class="sq" style="background:var(--gong)"></span>공영(2×××)
+      <span class="sq" style="background:var(--etc)"></span>기타 &nbsp;｜ 대도 차종: <span class="sq" style="background:#0277bd"></span><b>H₂</b> 수소전기 19대 <span class="sq" style="background:#c2185b"></span><b>CNG</b> 35대 &nbsp;｜ 노선도: <span id="legRoutes"></span><br>
+      <span style="color:#777">▲ 진행방향(추정) · 점선/반투명 = 신호 지연 · 위치는 BIS 정류장 통과 기준 · 정류장 점을 누르면 도착예정 표시</span>
+    </div>
+    <div id="keywarn"><div>지도를 불러오지 못했습니다.<br>인터넷 연결과 카카오디벨로퍼스 [카카오맵] 활성화 상태를 확인해 주세요.</div></div>
+  </div>
+  <div id="panel">
+    <div class="ptit"><span>관제 현황 <span id="ptime" style="color:#888;font-weight:400"></span></span><button id="panelToggle">접기/펼치기</button></div>
+    <div id="kpi">
+      <div class="kb"><b id="kRun" style="color:#c2185b">-</b><span>대도 운행</span></div>
+      <div class="kb"><b id="kIdle" style="color:#888">-</b><span>대도 미포착</span></div>
+      <div class="kb"><b id="kDs" style="color:#00796b">-</b><span>동신</span></div>
+      <div class="kb"><b id="kJp" style="color:#e65100">-</b><span>진평</span></div>
+      <div class="kb"><b id="kGy" style="color:#5e35b1">-</b><span>공영</span></div>
+    </div>
+    <div id="tabs">
+      <div class="tab on" data-t="daedo">대도</div>
+      <div class="tab" data-t="동신">동신</div>
+      <div class="tab" data-t="진평">진평</div>
+      <div class="tab" data-t="공영">공영</div>
+      <div class="tab" data-t="log">이벤트·기록 <span id="recState" style="color:#c0392b"></span></div>
+    </div>
+    <div id="tabBody">
+      <div id="fuelPanel"></div>
+      <div id="fleet"><table><thead><tr><th>차량</th><th>배정</th><th>상태</th><th>현재 위치</th><th>노선</th><th>갱신</th></tr></thead><tbody id="fleetB"></tbody></table></div>
+      <div id="roster" style="display:none"><table><thead><tr><th>차량</th><th>상태</th><th>노선</th><th>현재/마지막 정류장</th><th>포착</th></tr></thead><tbody id="rosterB"></tbody></table></div>
+      <div id="log" style="display:none">
+        <div class="ptit" style="background:#fff"><span>이벤트 (출발·입고 추정)</span><span id="evCnt" style="color:#888;font-weight:400"></span></div>
+        <div id="events"></div>
+        <div class="ptit" style="background:#fff"><span>위치 기록</span><span id="logCnt" style="color:#888;font-weight:400"></span></div>
+        <table><thead><tr><th>시각</th><th>차량</th><th>회사</th><th>노선</th><th>통과 정류장</th><th>순번</th><th>속도</th></tr></thead><tbody id="logB"></tbody></table>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="https://dapi.kakao.com/v2/maps/sdk.js?appkey=b01dd4f91989714d3f4d4baa8891962b&autoload=false"></script>
+<script>
+'use strict';
+/* ===================== 설정·상수 ===================== */
+const KEY='2BwOvsCVUB%2FNobU%2BYTo5LaFsL%2FI1ZiErlQ1NdTvAdRqrxR1tYweMGurrbtGi%2FMu78eO0p523%2F1zoHtv74XQPQQ%3D%3D';
+const CITY='32020';
+const DEPOT={lat:37.42141,lon:127.96392};
+const GH='https://raw.githubusercontent.com/no111jk-cell/daedo-bus-app/main/';
+const HUBS=['WJB251060001','WJB251053017','WJB251061032','WJB251056058','WJB251000130','WJB251000223','WJB251061023','WJB251053004','WJB251061028','WJB251011034','WJB251000045','WJB251068025'];
+// 차량관리대장 기준 배정 (2026.9.)
+const FLEET={'3·4':['1305','1329','1330','1335','1341','1348'],'13':['1306','1314','1317','1323','1324','1327','1333'],
+ '16':['1301','1307','1311','1321','1337','1340','1346','1358'],'16-1':['1315','1336','1359'],'21-25':['1309','1342','1349'],
+ '30':['1313','1356','1357'],'31·34':['1310','1318','1319','1320','1326','1328','1334','1345','1347','1350'],'50':['1352','1353','1354','1355'],
+ '81·82':['1344'],'90':['1316','1338','1339'],'100-2':['1332','1351'],'예비':['1322','1325','1331','1343']};
+const GRP_NOS={'3·4':['3','3-1','4','4-1'],'13':['13'],'16':['16'],'16-1':['16-1'],'21-25':['21','22','23','24','25'],'30':['30'],
+ '31·34':['31','34'],'50':['50'],'81·82':['81','82'],'90':['90'],'100-2':['100-2'],'예비':[]};
+/* ===== 차종(연료) 구분 — 근거: 「대도여객_차량관리대장_통합.xlsx」 차량총괄 시트 =====
+   수소전기 19대 / CNG 35대 (총 54대). 대장 갱신 시 아래 목록만 교체하면 됩니다. */
+const FUEL_H2=['1307', '1311', '1313', '1315', '1316', '1321', '1336', '1337', '1338', '1339', '1340', '1352', '1353', '1354', '1355', '1356', '1357', '1358', '1359'];
+const FUEL={};FUEL_H2.forEach(v=>FUEL[v]='H2');Object.values(FLEET).flat().forEach(v=>{if(!FUEL[v])FUEL[v]='CNG';});
+const FUEL_COL={H2:'#0277bd',CNG:'#c2185b'};
+const FUEL_LABEL={H2:'H\u2082',CNG:'CNG'};
+const FUEL_NAME={H2:'\uc218\uc18c\uc804\uae30',CNG:'CNG'};
+const FUEL_IMG={H2:'data:image/png;base64,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',CNG:'data:image/png;base64,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'};
+function fuBadge(v4){const f=FUEL[v4];return f?'<span class="fu fu-'+f+'" style="padding:0 3px;font-size:9px">'+FUEL_LABEL[f]+'</span> ':'';}
+const VEH_GRP={};Object.entries(FLEET).forEach(([g,vs])=>vs.forEach(v=>VEH_GRP[v]=g));
+const NO_GRP={};Object.entries(GRP_NOS).forEach(([g,nos])=>nos.forEach(n=>NO_GRP[n]=g));
+const GROUP_NO={'시내순환3번':['3'],'시내순환3-1번':['3-1'],'시내순환4번':['4'],'시내순환4-1번':['4-1'],'혁신순환16번':['16'],'혁신순환16-1번':['16-1'],
+ '혁신지선13번':['13'],'신림(21~25번대)':['21','22','23','24','25'],'연대30번':['30'],'한라대90번':['90'],'100-2번 기업도시':['100-2'],
+ '성문사81번':['81'],'82번':['82'],'50번(한정면허)':['50'],'귀래31·34 매지리':['31','34'],'서곡32번':['32']};
+const NO_GROUP={};Object.entries(GROUP_NO).forEach(([g,nos])=>nos.forEach(n=>{(NO_GROUP[n]=NO_GROUP[n]||[]).push(g);}));
+const CO_COL={'대도':'#c2185b','동신':'#00796b','진평':'#e65100','공영':'#5e35b1','기타':'#607d8b'};
+const STALE_TICKS=3, DROP_TICKS=10, MAX_LOG=6000;
+
+/* ===================== 상태 ===================== */
+const $=id=>document.getElementById(id);
+let map=null, routes={}, routeMeta={}, paths=null, routeTimes=null;
+let stopData={}, stopAll={}, stopOv=null;   // stopAll: 내장 노선도 기반 전 정류장 색인(1,875곳) — 노선 선택과 무관하게 검색·조회용
+let lines=[], stopOvs=[], pathSeq=0, extCache={}, extApiOk=null, routeMapInfo=null;
+try{Object.assign(extCache,JSON.parse(localStorage.getItem('wj_ext_v2')||'{}'));}catch(e){} // 노선도 캐시(v2: 26.8.24 100-2·90 개편 반영)
+function saveExt(){try{const ks=Object.keys(extCache).filter(k=>!(routeMapInfo&&routeMapInfo.n&&extCache[k]&&extCache[k].__file)).slice(-40);const o={};ks.forEach(k=>o[k]=extCache[k]);localStorage.setItem('wj_ext_v2',JSON.stringify(o));}catch(e){}}
+// 노선 개편 직후 route_paths.json 갱신 전까지 임시로 실시간 BIS 정류장으로 그릴 노선 목록
+const REVISED=new Set([]);   // 개편 노선의 DTG 경로가 route_paths.json에 반영되면 비워둠(비어있으면 정적 DTG 경로 사용)
+let vehMarks={}, tickNo=0, hlVeh='';
+const SLOT_COL=['#c2185b','#00796b','#1565c0'];
+let timer=null, refreshing=false, queuedRefresh=false, commFail=false, partialFail=false, lastOkAt=null;
+let lastVs=null, lastTs=null, spdCache={}, spdTick=0, lastPos={};
+let rec=false, logRows=[], events=[], lastSeen={}, seenAt={}, curTab='daedo';
+let otherSeen={}, cfg={};
+const coFilter={'대도':true,'동신':true,'진평':true,'공영':true,'기타':true};
+try{otherSeen=JSON.parse(localStorage.getItem('wj_bus_roster')||'{}');}catch(e){}
+try{cfg=JSON.parse(localStorage.getItem('wj_ctl_cfg')||'{}');}catch(e){}
+function saveCfg(){try{localStorage.setItem('wj_ctl_cfg',JSON.stringify({routes:selected(),ivl:$('ivl').value,showPath:$('showPath').checked,showStops:$('showStops').checked,showRt:$('showRt').checked,co:coFilter}));}catch(e){}}
+function saveRoster(){try{localStorage.setItem('wj_bus_roster',JSON.stringify(otherSeen));}catch(e){}}
+
+/* ===================== 유틸 ===================== */
+function company(vn){const m=String(vn).match(/(\d{4})$/);if(!m)return '기타';const h=m[1].slice(0,2);
+  if(h==='13')return '대도';if(h==='15'||h==='16'||h==='70')return '동신';if(h==='10'||h==='11')return '진평';if(m[1][0]==='2')return '공영';return '기타';}
+const v4of=vn=>{const m=String(vn).match(/(\d{4})$/);return m?m[1]:String(vn);};
+function hav(a,b,c,d){const R=6371,r=x=>x*Math.PI/180,dl=r(c-a),dg=r(d-b);const h=Math.sin(dl/2)**2+Math.cos(r(a))*Math.cos(r(c))*Math.sin(dg/2)**2;return 2*R*Math.asin(Math.sqrt(h));}
+function bearing(a,b,c,d){const r=x=>x*Math.PI/180,y=Math.sin(r(d-b))*Math.cos(r(c)),x=Math.cos(r(a))*Math.sin(r(c))-Math.sin(r(a))*Math.cos(r(c))*Math.cos(r(d-b));return (Math.atan2(y,x)*180/Math.PI+360)%360;}
+const hhmmss=d=>d.toLocaleTimeString('ko-KR',{hour12:false});
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+function setLed(state,text){const l=$('led');l.className=state;$('stxt').textContent=text;}
+async function pool(items,worker,limit){const q=[...items];let active=0;return new Promise(done=>{const next=()=>{if(!q.length&&active===0){done();return;}while(active<limit&&q.length){active++;worker(q.shift()).catch(()=>{}).finally(()=>{active--;next();});}};next();});}
+window.addEventListener('error',e=>{try{setLed('bad','오류: '+(e.message||'알 수 없는 오류'));}catch(_){}});
+
+/* ===================== API (초당 제한 준수·적응형) ===================== */
+let quotaHit=false, rateHit=0, rps=12, rpsClean=0;
+const bucket={t:[]};
+async function rateSlot(){ // 초당 rps건 이하로 발사 간격 조절
+  for(;;){const now=Date.now();bucket.t=bucket.t.filter(x=>now-x<1000);
+    if(bucket.t.length<rps){bucket.t.push(now);return;}
+    await new Promise(z=>setTimeout(z,60+Math.random()*60));}
+}
+async function api(path,params,retry=0){
+  const u='https://apis.data.go.kr/1613000/'+path+'?serviceKey='+KEY+'&_type=json&'+params;
+  await rateSlot();
+  try{
+    const t=await (await fetch(u)).text();
+    if(t.includes('PER_SECOND_EXCEEDS')){ // 코드23: 초당 제한 → 감속 후 재시도
+      rateHit++; rps=Math.max(5,Math.floor(rps*0.6)); rpsClean=0;
+      if(retry<5){await new Promise(z=>setTimeout(z,500+retry*400));return api(path,params,retry+1);}
+      return null;
+    }
+    if(t.includes('LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS')){quotaHit=true;return null;} // 코드22: 일일 한도
+    if(t.includes('cmmMsgHeader')){ if(retry<1){await new Promise(z=>setTimeout(z,300));return api(path,params,retry+1);} return null; }
+    const j=JSON.parse(t);
+    let it=j?.response?.body?.items?.item;
+    if(it===undefined||it===''||it===null) return [];
+    return Array.isArray(it)?it:[it];
+  }catch(e){ if(retry<1){await new Promise(z=>setTimeout(z,300));return api(path,params,retry+1);} return null; }
+}
+
+/* ===================== 노선 선택 ===================== */
+function selected(){const a=[];['r1','r2','r3'].forEach(id=>{const v=$(id).value;if(v&&!a.includes(v))a.push(v);});return a;}
+function slotOf(no){return selected().indexOf(String(no));}
+const isWonju=rid=>String(rid).startsWith('WJB251'); // WJB258 = 횡성군 노선(동일 번호 혼재) 제외
+
+/* ===================== 노선 목록 ===================== */
+async function loadRoutes(){
+  setLed('','노선 목록 수집 중...');
+  const seen={};
+  let all=await api('BusRouteInfoInqireService/getRouteNoList','cityCode='+CITY+'&numOfRows=1000&pageNo=1');
+  if(!all||!all.length){await new Promise(z=>setTimeout(z,500));all=await api('BusRouteInfoInqireService/getRouteNoList','cityCode='+CITY+'&numOfRows=1000&pageNo=1');}
+  if(all&&all.length){
+    all.forEach(r=>{const no=String(r.routeno);(seen[no]=seen[no]||new Set()).add(r.routeid);
+      routeMeta[r.routeid]={no,s:r.startnodenm||'',e:r.endnodenm||'',st:String(r.startvehicletime||''),et:String(r.endvehicletime||'')};});
+  }else{
+    for(const h of HUBS){
+      const list=await api('BusSttnInfoInqireService/getSttnThrghRouteList','cityCode='+CITY+'&nodeid='+h+'&numOfRows=200&pageNo=1')||[];
+      list.forEach(r=>{const no=String(r.routeno);(seen[no]=seen[no]||new Set()).add(r.routeid);});
+    }
+  }
+  routes=Object.fromEntries(Object.entries(seen).map(([k,v])=>[k,[...v]]));
+  if(!Object.keys(routes).length){setLed('bad','노선 목록을 받지 못했습니다 — 인터넷 연결 확인 후 [새로고침]');$('refresh').onclick=()=>loadRoutes();return;}
+  // 횡성 노선 제거
+  Object.keys(routes).forEach(k=>{routes[k]=routes[k].filter(isWonju);if(!routes[k].length)delete routes[k];});
+  const sortNo=(a,b)=>{const na=parseFloat(a),nb=parseFloat(b);if(isNaN(na)&&isNaN(nb))return a.localeCompare(b);if(isNaN(na))return 1;if(isNaN(nb))return -1;return na-nb||a.localeCompare(b);};
+  const mine=Object.keys(routes).filter(k=>NO_GRP[k]!==undefined).sort(sortNo);
+  const others=Object.keys(routes).filter(k=>NO_GRP[k]===undefined).sort(sortNo);
+  const fill=(id,ph)=>{const sel=$(id);sel.innerHTML='';const o0=document.createElement('option');o0.value='';o0.textContent=ph;sel.appendChild(o0);
+    const mk=(label,keys)=>{const og=document.createElement('optgroup');og.label=label;keys.forEach(k=>{const o=document.createElement('option');o.value=k;const m=routeMeta[routes[k][0]];o.textContent=k+'번'+(m&&m.s?' '+m.s+'↔'+m.e:'')+' ('+routes[k].length+')';og.appendChild(o);});sel.appendChild(og);};
+    mk('★ 대도 노선',mine);mk('타사·공영 노선',others);};
+  fill('r1','노선 1 선택');fill('r2','+ 노선 2 (선택)');fill('r3','+ 노선 3 (선택)');
+  const want=(Array.isArray(cfg.routes)&&cfg.routes.length)?cfg.routes:['16'];
+  ['r1','r2','r3'].forEach((id,i)=>{const v=want[i];if(v&&routes[v])$(id).value=v;});
+  if(!selected().length&&mine.length)$('r1').value=mine[0];
+  updateLegend();
+  setLed('','노선 '+Object.keys(routes).length+'개 확인 — 첫 조회 중...');
+  setTimer(); drawPath(); refresh();
+}
+async function loadGH(){
+  const get=async f=>{try{return await (await fetch('./'+f)).json();}catch(e){return await (await fetch(GH+f)).json();}};
+  try{paths=await get('route_paths.json');}catch(e){paths=null;}
+  try{routeTimes=await get('route_times.json');}catch(e){routeTimes=null;}
+  // ★내장 노선도(routemap.json, 2026-09-08 노선도수집기 산출) — 전 계통 정류장 순번·좌표를 미리 채워
+  //   API 호출 없이 즉시 그림. 파일이 없으면 종전대로 실시간 API로 받음(기능 저하 없음).
+  try{const rm=await get('routemap.json');let n=0;
+    if(rm&&rm.routes){for(const rid in rm.routes){const raw=rm.routes[rid];if(!Array.isArray(raw)||!raw.length)continue;
+      const st=raw.map(a=>({id:String(a[0]),no:'',nm:String(a[1]),lat:+a[2],lon:+a[3],ord:+a[4],ud:String(a[5])}));st.__file=true;extCache[rid]=st;n++;
+      const rno=(rm.meta&&rm.meta.routeno&&rm.meta.routeno[rid])||'';
+      st.forEach(p=>{const d=stopAll[p.id]||(stopAll[p.id]={nm:p.nm,lat:p.lat,lon:p.lon,rts:[]});d.rts.push({rid,ord:p.ord,ud:p.ud,routeNo:rno});});}}
+    routeMapInfo={n,date:(rm&&rm.meta&&rm.meta.date)||''};
+    try{updateLegend();}catch(e){}
+  }catch(e){routeMapInfo={n:0,date:''};}
+}
+
+/* ===================== 노선도·정류장 ===================== */
+function clearLines(){lines.forEach(l=>l.setMap(null));lines=[];stopOvs.forEach(o=>o.setMap(null));stopOvs=[];closeStop();}
+function closeStop(){if(stopOv){stopOv.setMap(null);stopOv=null;}}
+function selGroups(){const out=[];selected().forEach(n=>(NO_GROUP[n]||[]).forEach(g=>{if(!out.includes(g))out.push(g);}));return out;}
+function fmtT(t){t=String(t||'').trim();return /^\d{3,4}$/.test(t)&&t!=='0000'?t.padStart(4,'0').replace(/(\d\d)(\d\d)/,'$1:$2'):'';}
+function drawPath(){
+  pathSeq++; clearLines(); stopData={};
+  // 대도 노선: DTG 정밀 경로
+  if($('showPath').checked&&paths){
+    selected().forEach((no,slot)=>{
+      if(REVISED.has(String(no)))return;   // 개편 노선은 아래 실시간 정류장 경로 사용
+      (NO_GROUP[no]||[]).forEach(g=>{Object.values(paths[g]||{}).forEach(v=>{
+        const pts=(v.path||[]).map(p=>new kakao.maps.LatLng(p[0],p[1]));if(pts.length<2)return;
+        const pl=new kakao.maps.Polyline({path:pts,strokeWeight:4,strokeColor:SLOT_COL[slot],strokeOpacity:.5});pl.setMap(map);lines.push(pl);});});
+    });
+  }
+  drawPathExt();
+}
+async function drawPathExt(){
+  const my=pathSeq;
+  if(extApiOk===false) return;
+  const jobs=[];
+  selected().forEach((no,slotI)=>{(routes[no]||[]).forEach(rid=>jobs.push({rid,slotI,daedo:!!NO_GROUP[no]})); });
+  if(!jobs.length) return;
+  await pool(jobs,async ({rid,slotI,daedo})=>{
+    let st=extCache[rid];
+    if(st===undefined){
+      const url='https://apis.data.go.kr/1613000/BusRouteInfoInqireService/getRouteAcctoThrghSttnList?serviceKey='+KEY+'&_type=json&cityCode='+CITY+'&routeId='+rid+'&numOfRows=500&pageNo=1';
+      try{
+        await rateSlot();
+        let t=await (await fetch(url)).text();
+        if(t.includes('cmmMsgHeader')){await new Promise(z=>setTimeout(z,500));await rateSlot();t=await (await fetch(url)).text();}
+        if(t.includes('SERVICE_KEY_IS_NOT_REGISTERED')){extApiOk=false;return;}
+        const j=JSON.parse(t);let it=j?.response?.body?.items?.item||[];if(!Array.isArray(it))it=[it];
+        st=it.map(x=>({id:String(x.nodeid),no:x.nodeno,nm:x.nodenm,lat:+x.gpslati,lon:+x.gpslong,ord:+x.nodeord,ud:String(x.updowncd??'0')}))
+            .filter(p=>p.lat>36&&p.lat<38.5).sort((a,b)=>a.ord-b.ord);
+        if(st.length){extCache[rid]=st; saveExt();} extApiOk=true;
+      }catch(e){st=[];}
+    }
+    if(my!==pathSeq||!st||!st.length) return;
+    // 정류장 색인 (클릭 정보용)
+    st.forEach(p=>{
+      const d=stopData[p.id]||(stopData[p.id]={nm:p.nm,no:p.no,lat:p.lat,lon:p.lon,rts:[]});
+      d.rts.push({rid,ord:p.ord,ud:p.ud,routeNo:routeMeta[rid]?routeMeta[rid].no:'',slotI});
+    });
+    // 타사 노선 경로선(대도는 DTG선 사용)
+    if((!daedo||REVISED.has(String(routeMeta[rid]?routeMeta[rid].no:'')))&&$('showPath').checked){
+      const dirs={};st.forEach(p=>{(dirs[p.ud]=dirs[p.ud]||[]).push(p);});
+      Object.values(dirs).forEach(seg=>{if(seg.length<2)return;
+        const pl=new kakao.maps.Polyline({path:seg.map(p=>new kakao.maps.LatLng(p.lat,p.lon)),strokeWeight:3,strokeColor:SLOT_COL[slotI],strokeOpacity:.5});pl.setMap(map);lines.push(pl);});
+    }
+    // 정류장 점 (전 노선 공통 · 클릭 시 정보)
+    if($('showStops').checked){
+      st.forEach(p=>{
+        const w=document.createElement('div');w.className='stopwrap';w.title=p.nm;
+        const el=document.createElement('div');el.className='stopdot';el.style.border='3px solid '+SLOT_COL[slotI];
+        w.appendChild(el);
+        w.onclick=ev=>{ev.stopPropagation();openStop(p.id);};
+        const ov=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(p.lat,p.lon),content:w,zIndex:2,clickable:true});
+        ov.setMap(map);stopOvs.push(ov);
+      });
+    }
+  },3);
+}
+function openStop(id){
+  closeStop();
+  const d=stopData[id]||stopAll[id]; if(!d) return;   // 선택 노선에 없어도 내장 노선도 색인으로 조회
+  const now=lastVs||[];
+  let rows='';
+  // 노선별: 순번·첫차/막차 + 실시간 접근 차량
+  const byNo={};
+  d.rts.forEach(r=>{const k=String(r.routeNo);(byNo[k]=byNo[k]||[]).push(r);});
+  Object.entries(byNo).forEach(([no,arr])=>{
+    const slotI=arr[0].slotI, m=routeMeta[arr[0].rid]||{};
+    const col=(slotI!==undefined?SLOT_COL[slotI]:'#607d8b');   // 미선택 노선은 회색 배지
+    const t1=fmtT(m.st), t2=fmtT(m.et);
+    // 이 정류장으로 접근 중인 차량(같은 계통 + 순번이 정류장 이전)
+    const appr=[];
+    arr.forEach(r=>{
+      now.forEach(b=>{
+        if(b._rid!==r.rid) return;
+        const gap=r.ord-(+b.nodeord||0);
+        if(gap>=0&&gap<=15) appr.push({v4:v4of(b.vehicleno),gap,nm:b.nodenm||''});
+      });
+    });
+    appr.sort((a,b)=>a.gap-b.gap);
+    let ap='';
+    if(appr.length){
+      ap=appr.slice(0,3).map(a=>a.gap===0?('<span class="app">🚌'+a.v4+' 도착·통과 중</span>'):('<span class="app">🚌'+a.v4+' '+a.gap+'정류장 전</span><span class="dim">('+esc(a.nm)+')</span>')).join('<br>');
+    }else ap='<span class="dim">접근 중인 차량 없음</span>';
+    let tt='';
+    if(routeTimes&&NO_GRP[no]!==undefined){
+      const g=(NO_GROUP[no]||[])[0];
+      const rt=(routeTimes[g]||[])[0];
+      if(rt) tt='<span class="dim"> · 일 '+rt.trips+'회</span>';
+    }
+    rows+='<div class="rline"><span class="rb" style="background:'+col+'">'+esc(no)+'번</span> <span class="dim">순번 '+arr.map(r=>r.ord).join('·')+((t1&&t2)?' · 첫차 '+t1+' 막차 '+t2:'')+'</span>'+tt+'<br>'+ap+'</div>';
+  });
+  const el=document.createElement('div');el.className='spop';
+  el.innerHTML='<span class="x">×</span><h4>🚏 '+esc(d.nm)+(d.no?' <span class="dim">('+d.no+')</span>':'')+'</h4>'+rows+
+    '<div style="margin-top:5px"><a href="https://map.kakao.com/link/map/'+encodeURIComponent(d.nm)+','+d.lat+','+d.lon+'" target="_blank" style="color:#2e6fb0;font-weight:700;text-decoration:none;font-size:11px">카카오맵에서 열기 ↗</a></div>';
+  el.querySelector('.x').onclick=()=>closeStop();
+  stopOv=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(d.lat,d.lon),content:el,yAnchor:1.12,zIndex:30,clickable:true});
+  stopOv._sid=id;
+  stopOv.setMap(map);
+  loadArrivals(id,el);
+}
+/* ── 도착예정(국토부 TAGO 버스도착정보 · 시청 안내기와 같은 값) — 정류장 창 열 때 1회 조회 ── */
+let arvCache={};
+async function loadArrivals(id,el){
+  const box=document.createElement('div');
+  box.style.cssText='margin-top:6px;border-top:1px dashed var(--line);padding-top:5px;font-size:11px';
+  el.insertBefore(box,el.lastElementChild);
+  const c=arvCache[id];
+  if(c&&Date.now()-c.t<20000){box.innerHTML=c.html;return;}   // 20초 안 재클릭은 재사용
+  box.innerHTML='<span class="dim">⏱ 도착예정 불러오는 중…</span>';
+  const it=await api('ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList','cityCode='+CITY+'&nodeId='+id+'&numOfRows=40&pageNo=1');
+  if(!stopOv||stopOv._sid!==id) return;                        // 그 사이 다른 정류장을 열었으면 버림
+  let html;
+  if(it===null) html='<span class="dim">⏱ 도착예정 응답 없음 — 잠시 후 다시 눌러 보세요</span>';
+  else if(!it.length) html='<span class="dim">⏱ 지금 도착예정으로 잡힌 버스 없음</span>';
+  else{
+    it.sort((a,b)=>(+a.arrtime)-(+b.arrtime));
+    html='<b>⏱ 도착예정</b> <span class="dim">(시청 안내기와 같은 값)</span><br>'+it.slice(0,6).map(a=>{
+      const m=Math.round((+a.arrtime)/60), t=m<=0?'곧 도착':(m+'분 뒤');
+      return '<span class="app">'+esc(String(a.routeno))+'번</span> <b>'+t+'</b> <span class="dim">· '+(+a.arrprevstationcnt)+'정류장 전'+(a.vehicletp&&String(a.vehicletp).indexOf('저상')>=0?' · 저상':'')+'</span>';
+    }).join('<br>');
+  }
+  arvCache[id]={t:Date.now(),html};
+  box.innerHTML=html;
+}
+
+/* ===================== 조회 ===================== */
+function targetRouteIds(){const ids=[];selected().forEach(n=>(routes[n]||[]).forEach(id=>{if(isWonju(id)&&!ids.includes(id))ids.push(id);}));return ids;}
+async function refresh(){
+  if(!Object.keys(routes).length) return;
+  if(refreshing){queuedRefresh=true;return;}
+  refreshing=true;
+  try{
+    const ids=targetRouteIds(); if(!ids.length){setLed('warn','노선을 선택하세요');return;}
+    setLed(lastOkAt?'ok':'','조회 중… (계통 '+ids.length+'개)');
+    const buses={}; let ok=0,err=0; quotaHit=false; const rateBefore=rateHit;
+    await pool(ids,async rid=>{
+      const list=await api('BusLcInfoInqireService/getRouteAcctoBusLcList','cityCode='+CITY+'&routeId='+rid+'&numOfRows=100&pageNo=1');
+      if(list===null){err++;return;} ok++;
+      list.forEach(b=>{if(b.vehicleno){b._rid=rid;buses[b.vehicleno]=b;}});
+    },12);
+    if(rateHit===rateBefore){rpsClean++; if(rpsClean>=2&&rps<12){rps=Math.min(12,rps+2);rpsClean=0;}}
+    commFail=(ok===0&&err>0); partialFail=(err>0&&ok>0);
+    if(!commFail) lastOkAt=new Date();
+    lastVs=Object.values(buses); lastTs=new Date();
+    paint(lastVs,lastTs,{ok,err,rate:rateHit-rateBefore});
+  }catch(e){setLed('bad','오류: '+e.message);}
+  finally{refreshing=false; if(queuedRefresh){queuedRefresh=false; refresh();}}
+}
+
+/* ===================== 마커 ===================== */
+function glide(e,lat2,lon2){
+  if(e.anim){cancelAnimationFrame(e.anim);e.anim=null;}
+  const lat1=e.curLat??e.lat, lon1=e.curLon??e.lon; e.lat=lat2;e.lon=lon2;
+  if(Math.abs(lat2-lat1)+Math.abs(lon2-lon1)<1e-7){e.curLat=lat2;e.curLon=lon2;return;}
+  const t0=performance.now(),D=1100;
+  const step=t=>{const k=Math.min(1,(t-t0)/D),z=k*(2-k);e.curLat=lat1+(lat2-lat1)*z;e.curLon=lon1+(lon2-lon1)*z;e.ov.setPosition(new kakao.maps.LatLng(e.curLat,e.curLon));e.anim=k<1?requestAnimationFrame(step):null;};
+  e.anim=requestAnimationFrame(step);
+}
+function busEl(v4,co,rt){
+  const el=document.createElement('div');el.className='bus';
+  const fu=(co==='대도')?FUEL[v4]:null;
+  el.style.background=fu?FUEL_COL[fu]:CO_COL[co];
+  el.innerHTML='<span class="ar" style="display:none"></span>'
+    +(fu?'<span class="fu fu-'+fu+'">'+FUEL_LABEL[fu]+'</span>':'')
+    +'<span class="nm">🚌'+v4+'</span><span class="rt"'+($('showRt').checked?'':' style="display:none"')+'>'+esc(rt)+'</span>';
+  return el;
+}
+function resetAllMarks(){Object.values(vehMarks).forEach(e=>{if(e.anim)cancelAnimationFrame(e.anim);e.ov.setMap(null);});vehMarks={};lastPos={};}
+/* ===================== 인가 시간표(계획) — 수집기 v5와 동일 데이터 ===================== */
+const SCHED={"100-2":{"WD":{"A":["6:10","7:50","8:30","9:40","12:15","12:55","14:00","15:40","16:15","18:00","19:15","20:00"],"B":["6:10","7:00","7:40","9:35","10:10","11:15","13:50","14:30","15:35","17:20","18:00"]},"SAT":{"A":["6:10","7:50","8:30","9:40","12:15","12:55","14:00","15:40","16:15","18:00","19:15","20:00"],"B":["6:10","7:00","7:40","9:35","10:10","11:15","13:50","14:30","15:35","17:20","18:00"]},"SUN":{"A":["6:10","7:50","8:30","9:40","12:15","12:55","14:00","15:40","16:15","18:00","19:15","20:00"],"B":["6:10","7:00","7:40","9:35","10:10","11:15","13:50","14:30","15:35","17:20","18:00"]}},"100":{"SAT":{"A":["8:05","11:10","14:20","17:20","21:00"],"B":["6:35","9:25","12:30","15:38","19:05","22:25"]},"SUN":{"A":["8:05","11:10","14:20","17:20","21:00"],"B":["6:35","9:25","12:30","15:38","19:05","22:25"]},"WD":{"A":["8:05","11:10","14:20","17:20","21:00"],"B":["6:35","7:37","9:25","12:30","15:38","19:05","22:25"]}},"10":{"WD":{"A":["6:50","9:15","11:45","14:15","17:00","19:20"],"B":["7:50","10:15","12:45","15:15","18:00","20:10"]},"SAT":{"A":["6:50","9:15","11:45","14:15","17:00","19:20"],"B":["7:50","10:15","12:45","15:15","18:00","20:10"]},"SUN":{"A":["6:50","9:15","11:45","14:15","17:00","19:20"],"B":["7:50","10:15","12:45","15:15","18:00","20:10"]}},"111":{"WD":{"A":["7:30","9:00","9:40","10:45","11:30","12:30","13:15","14:30","15:20","16:00","17:00","18:00","18:55","19:40","20:55","22:05","23:00"],"B":["7:30","8:55","10:25","11:05","12:05","12:55","13:55","14:40","15:55","16:45","17:30","18:25","19:30","20:20","21:05","22:35","23:20"]},"SAT":{"A":["7:30","9:00","9:40","10:45","11:30","12:30","13:15","14:30","15:20","16:00","17:00","18:00","18:55","19:40","20:55","22:05","23:00"],"B":["7:30","8:55","10:25","11:05","12:05","12:55","13:55","14:40","15:55","16:45","17:30","18:25","19:30","20:20","21:05","22:35","23:20"]},"SUN":{"A":["7:30","9:00","9:40","10:45","11:30","12:30","13:15","14:30","15:20","16:00","17:00","18:00","18:55","19:40","20:55","22:05","23:00"],"B":["7:30","8:55","10:25","11:05","12:05","12:55","13:55","14:40","15:55","16:45","17:30","18:25","19:30","20:20","21:05","22:35","23:20"]}},"13":{"WD":{"A":["6:20","6:45","7:10","7:30","7:50","8:15","8:45","9:10","9:35","10:05","10:35","11:00","11:22","11:45","12:10","12:40","13:10","13:35","14:02","14:30","14:50","15:15","15:45","16:15","16:40","17:05","17:30","18:00","18:25","18:45","19:15","19:40","20:10","20:35","20:55"],"B":["6:45","7:35","8:02","8:30","9:00","9:25","9:35","10:00","10:20","10:55","11:25","11:50","12:15","12:47","13:10","13:35","14:02","14:30","14:55","15:20","15:45","16:10","16:35","17:05","17:35","18:00","18:35","19:00","19:20","19:45","20:05","20:32","21:00","21:25"]},"SAT":{"A":["6:20","6:45","7:10","7:30","7:50","8:15","8:45","9:10","9:35","10:05","10:35","11:00","11:22","11:45","12:10","12:40","13:10","13:35","14:02","14:30","14:50","15:15","15:45","16:15","16:40","17:05","17:30","18:00","18:25","18:45","19:15","19:40","20:10","20:35","20:55"],"B":["6:45","7:35","8:02","8:30","9:00","9:25","9:35","10:00","10:20","10:55","11:25","11:50","12:15","12:47","13:10","13:35","14:02","14:30","14:55","15:20","15:45","16:10","16:35","17:05","17:35","18:00","18:35","19:00","19:20","19:45","20:05","20:32","21:00","21:25"]},"SUN":{"A":["6:20","6:45","7:10","7:30","7:50","8:15","8:45","9:10","9:35","10:05","10:35","11:00","11:22","11:45","12:10","12:40","13:10","13:35","14:02","14:30","14:50","15:15","15:45","16:15","16:40","17:05","17:30","18:00","18:25","18:45","19:15","19:40","20:10","20:35","20:55"],"B":["6:45","7:35","8:02","8:30","9:00","9:25","9:35","10:00","10:20","10:55","11:25","11:50","12:15","12:47","13:10","13:35","14:02","14:30","14:55","15:20","15:45","16:10","16:35","17:05","17:35","18:00","18:35","19:00","19:20","19:45","20:05","20:32","21:00","21:25"]}},"16-1":{"WD":{"A":["6:10","6:30","6:50","7:10","7:30","7:50","8:10","8:30","8:50","9:15","9:35","9:55","10:15","10:35","10:55","11:20","11:45","12:05","12:25","12:45","13:05","13:25","13:45","14:05","14:25","14:50","15:10","15:35","15:55","16:15","16:35","16:55","17:20","17:40","18:00","18:20","18:40","19:00","19:25","19:50","20:10","20:30","20:45","21:05"],"B":[]},"SAT":{"A":["6:10","6:30","6:50","7:10","7:30","7:50","8:10","8:30","8:50","9:15","9:35","9:55","10:15","10:35","10:55","11:20","11:45","12:05","12:25","12:45","13:05","13:25","13:45","14:05","14:25","14:50","15:10","15:35","15:55","16:15","16:35","16:55","17:20","17:40","18:00","18:20","18:40","19:00","19:25","19:50","20:10","20:30","20:45","21:05"],"B":[]},"SUN":{"A":["6:10","6:30","6:50","7:10","7:30","7:50","8:10","8:30","8:50","9:15","9:35","9:55","10:15","10:35","10:55","11:20","11:45","12:05","12:25","12:45","13:05","13:25","13:45","14:05","14:25","14:50","15:10","15:35","15:55","16:15","16:35","16:55","17:20","17:40","18:00","18:20","18:40","19:00","19:25","19:50","20:10","20:30","20:45","21:05"],"B":[]}},"16":{"WD":{"A":["6:00","6:20","6:40","7:00","7:20","7:40","8:00","8:20","8:40","9:00","9:20","9:35","9:50","10:02","10:15","10:30","10:47","11:05","11:22","11:40","11:55","12:10","12:25","12:42","13:00","13:15","13:30","13:45","14:00","14:15","14:32","14:50","15:05","15:20","15:35","15:50","16:05","16:22","16:40","16:55","17:10","17:25","17:42","18:00","18:15","18:32","18:47","19:00","19:15","19:30","19:45","20:00","20:17","20:35","22:00","22:35"],"B":[]},"SAT":{"A":["6:00","6:20","6:40","7:00","7:20","7:40","8:00","8:20","8:40","9:00","9:20","9:35","9:50","10:02","10:15","10:30","10:47","11:05","11:22","11:40","11:55","12:10","12:25","12:42","13:00","13:15","13:30","13:45","14:00","14:15","14:32","14:50","15:05","15:20","15:35","15:50","16:05","16:22","16:40","16:55","17:10","17:25","17:42","18:00","18:15","18:32","18:47","19:00","19:15","19:30","19:45","20:00","20:17","20:35","22:00","22:35"],"B":[]},"SUN":{"A":["6:00","6:20","6:40","7:00","7:20","7:40","8:00","8:20","8:40","9:00","9:20","9:35","9:50","10:02","10:15","10:30","10:47","11:05","11:22","11:40","11:55","12:10","12:25","12:42","13:00","13:15","13:30","13:45","14:00","14:15","14:32","14:50","15:05","15:20","15:35","15:50","16:05","16:22","16:40","16:55","17:10","17:25","17:42","18:00","18:15","18:32","18:47","19:00","19:15","19:30","19:45","20:00","20:17","20:35","22:00","22:35"],"B":[]}},"18":{"WD":{"A":["6:00","7:10","7:35","9:10","10:20","10:45","12:10","13:20","13:45","15:10","16:20","16:55","18:30","19:35","20:05"],"B":["7:15","8:30","9:05","10:25","11:35","12:00","13:25","14:35","15:00","16:30","17:40","18:15","19:50","20:50","21:20"]},"SAT":{"A":["6:00","7:10","7:35","9:10","10:20","10:45","12:10","13:20","13:45","15:10","16:20","16:55","18:30","19:35","20:05"],"B":["7:15","8:30","9:05","10:25","11:35","12:00","13:25","14:35","15:00","16:30","17:40","18:15","19:50","20:50","21:20"]}},"2-1":{"SUN":{"A":["6:00","6:50","8:20","9:00","9:45","11:20","11:54","12:40","14:20","14:48","15:34","17:14","17:50","18:40","20:20","21:00"],"B":["7:12","8:00","9:32","10:12","10:57","12:30","13:06","13:52","15:35","16:00","16:50","18:30","19:02","19:52","21:30"]},"SAT":{"A":["6:00","6:50","7:35","8:20","9:00","9:45","10:30","11:20","11:54","12:40","13:24","14:20","14:48","15:34","16:17","17:14","17:50","18:40","19:30","20:20","21:00"],"B":["7:12","8:00","8:50","9:32","10:12","10:57","11:42","12:30","13:06","13:52","14:35","15:35","16:00","16:50","17:30","18:30","19:02","19:52","20:42","21:30"]},"WD":{"A":["6:20","6:55","7:30","7:50","8:15","8:42","9:12","9:49","10:19","10:44","11:09","11:36","12:06","12:43","13:13","13:38","14:03","14:30","15:00","15:37","16:07","16:32","16:57","17:24","17:54","18:31","19:02","19:26","19:52","20:18","20:40","20:55","21:20"],"B":["7:00","7:30","8:00","8:35","9:00","9:30","9:54","10:24","11:00","11:30","12:00","12:20","12:50","13:18","13:55","14:25","14:50","15:15","15:42","16:15","16:49","17:20","17:44","18:15","18:40","19:05","19:45","20:00","20:25","20:38","21:04","21:30","21:52","22:00"]}},"21":{"WD":{"A":["5:55","7:40","9:55","11:05","12:50","14:00","16:05","18:20","18:50","19:50","20:25","20:55"],"B":["6:55","9:00","11:10","12:20","14:15","15:10","17:15","19:30","20:00","21:05","21:30","22:05"]},"SAT":{"A":["5:55","7:40","9:55","11:05","12:50","14:00","16:05","18:20","18:50","19:50","20:25","20:55"],"B":["6:55","9:00","11:10","12:20","14:15","15:10","17:15","19:30","20:00","21:05","21:30","22:05"]},"SUN":{"A":["5:55","7:40","9:55","11:05","12:50","14:00","16:05","18:20","18:50","19:50","20:25","20:55"],"B":["6:55","9:00","11:10","12:20","14:15","15:10","17:15","19:30","20:00","21:05","21:30","22:05"]}},"22":{"WD":{"A":["6:45","8:55","11:35","15:00","16:45","19:20"],"B":["8:10","10:20","13:05","16:25","18:05","20:35"]},"SAT":{"A":["6:45","8:55","11:35","15:00","16:45","19:20"],"B":["8:10","10:20","13:05","16:25","18:05","20:35"]},"SUN":{"A":["6:45","8:55","11:35","15:00","16:45","19:20"],"B":["8:10","10:20","13:05","16:25","18:05","20:35"]}},"23":{"WD":{"A":["6:10","8:20","12:10","14:25","17:25"],"B":["7:20","9:45","13:40","15:45","18:45"]},"SAT":{"A":["6:10","8:20","12:10","14:25","17:25"],"B":["7:20","9:45","13:40","15:45","18:45"]},"SUN":{"A":["6:10","8:20","12:10","14:25","17:25"],"B":["7:20","9:45","13:40","15:45","18:45"]}},"24":{"WD":{"A":["9:25","13:30","17:55"],"B":["7:15","11:20","15:40","19:30"]},"SAT":{"A":["9:25","13:30","17:55"],"B":["7:15","11:20","15:40","19:30"]},"SUN":{"A":["9:25","13:30","17:55"],"B":["7:15","11:20","15:40","19:30"]}},"25":{"WD":{"A":["7:10","10:30","15:30"],"B":["8:55","12:15","17:15"]},"SAT":{"A":["7:10","10:30","15:30"],"B":["8:55","12:15","17:15"]},"SUN":{"A":["7:10","10:30","15:30"],"B":["8:55","12:15","17:15"]}},"2":{"SUN":{"A":["6:20","7:00","7:40","8:55","9:40","10:20","11:35","12:20","13:00","14:25","15:00","15:50","17:05","17:40","18:30","19:45","20:30"],"B":["7:20","8:05","8:45","10:00","10:45","11:25","12:40","13:25","14:15","15:30","16:05","16:55","18:10","18:45","19:35","20:50","21:35"]},"SAT":{"A":["6:20","7:00","7:40","8:15","8:55","9:40","10:20","11:05","11:35","12:20","13:00","13:45","14:25","15:00","15:50","16:30","17:05","17:40","18:30","19:20","19:45","20:30"],"B":["6:40","7:20","8:05","8:45","9:20","10:00","10:45","11:25","12:10","12:40","13:25","14:15","14:50","15:30","16:05","16:55","17:45","18:10","18:45","19:35","20:25","20:50","21:35"]},"WD":{"A":["6:00","6:30","6:55","7:20","7:40","7:55","8:20","8:55","9:25","9:45","10:05","10:20","10:50","11:10","11:40","12:00","12:25","12:45","13:05","13:25","13:55","14:20","14:40","15:05","15:25","15:50","16:10","16:40","17:00","17:25","17:45","18:00","18:25","18:50","19:25","19:45","20:05","20:25","20:45"],"B":["7:05","7:35","8:05","8:25","8:50","9:05","9:25","10:00","10:30","10:50","11:10","11:25","11:55","12:15","12:45","13:10","13:30","13:50","14:17","14:30","15:00","15:25","15:50","16:10","16:30","16:55","17:15","17:55","18:05","18:30","18:50","19:15","19:30","20:30","20:50","21:10","21:25"]}},"3-1":{"SAT":{"A":["6:55","9:30","12:05","14:40","17:15","19:45"],"B":[]},"SUN":{"A":["6:55","9:30","12:05","14:40","17:15","19:45"],"B":[]},"WD":{"A":["7:05","9:40","12:20","14:50","17:25","20:00"],"B":[]}},"30":{"WD":{"A":["6:10","6:40","7:10","7:35","8:05","8:40","9:20","10:05","10:30","10:50","11:15","11:40","12:10","12:50","13:15","13:40","14:05","14:30","15:00","15:35","16:05","16:30","17:00","17:30","18:00","18:30","19:00","19:25","20:10","21:10","22:00","23:00"],"B":["7:05","7:45","8:15","8:55","9:15","9:35","9:55","10:25","11:10","11:35","12:00","12:25","12:50","13:15","13:55","14:20","14:45","15:10","15:35","16:10","16:50","17:20","17:45","18:20","18:55","19:20","19:40","20:05","20:30","21:15","22:10","23:00"]},"SAT":{"A":["6:10","6:40","7:10","7:35","8:05","8:40","9:20","10:05","10:30","10:50","11:15","11:40","12:10","12:50","13:15","13:40","14:05","14:30","15:00","15:35","16:05","16:30","17:00","17:30","18:00","18:30","19:00","19:25","20:10","21:10","22:00","23:00"],"B":["7:05","7:45","8:15","8:55","9:15","9:35","9:55","10:25","11:10","11:35","12:00","12:25","12:50","13:15","13:55","14:20","14:45","15:10","15:35","16:10","16:50","17:20","17:45","18:20","18:55","19:20","19:40","20:05","20:30","21:15","22:10","23:00"]},"SUN":{"A":["6:10","6:40","7:10","7:35","8:05","8:40","9:20","10:05","10:30","10:50","11:15","11:40","12:10","12:50","13:15","13:40","14:05","14:30","15:00","15:35","16:05","16:30","17:00","17:30","18:00","18:30","19:00","19:25","20:10","21:10","22:00","23:00"],"B":["7:05","7:45","8:15","8:55","9:15","9:35","9:55","10:25","11:10","11:35","12:00","12:25","12:50","13:15","13:55","14:20","14:45","15:10","15:35","16:10","16:50","17:20","17:45","18:20","18:55","19:20","19:40","20:05","20:30","21:15","22:10","23:00"]}},"31":{"SAT":{"A":["5:50","6:00","6:20","6:55","7:42","8:40","9:35","10:40","11:27","12:35","13:30","14:05","14:55","15:55","16:50","17:20","18:45","19:07","19:50"],"B":["6:55","7:20","7:05","8:10","8:50","9:40","10:35","11:25","12:27","13:27","14:30","15:12","16:00","16:50","17:55","18:47","19:25","20:35","21:00"]},"SUN":{"A":["5:50","6:00","6:20","6:55","7:42","8:40","9:35","10:40","11:27","12:35","13:30","14:05","14:55","15:55","16:50","17:20","18:45","19:07","19:50"],"B":["6:55","7:20","7:05","8:10","8:50","9:40","10:35","11:25","12:27","13:27","14:30","15:12","16:00","16:50","17:55","18:47","19:25","20:35","21:00"]},"WD":{"A":["5:50","5:45","6:15","6:55","7:40","8:00","9:10","10:00","10:20","11:00","11:30","12:45","13:35","14:20","14:55","15:40","16:00","16:42","17:40","19:05","19:50"],"B":["6:35","7:10","7:00","8:05","8:55","9:30","10:02","11:02","11:45","12:20","13:05","13:30","14:30","15:40","16:35","17:05","17:40","18:05","18:35","19:45","21:00"]}},"32":{"WD":{"A":["5:45","7:50","10:05","12:25","14:45","17:05","19:20"],"B":["6:35","8:40","11:00","13:20","15:40","18:00","20:10"]},"SAT":{"A":["5:45","7:50","10:05","12:25","14:45","17:05","19:20"],"B":["6:35","8:40","11:00","13:20","15:40","18:00","20:10"]},"SUN":{"A":["5:45","7:50","10:05","12:25","14:45","17:05","19:20"],"B":["6:35","8:40","11:00","13:20","15:40","18:00","20:10"]}},"34-1":{"WD":{"A":["6:05","6:35","7:05","7:27","7:50","8:37","8:55","9:25","9:50","10:10","10:40","11:10","11:42","12:07","12:32","13:12","13:45","14:07","14:30","15:05","15:30","15:50","16:10","16:30","17:10","17:25","17:50","18:15","18:37","19:17","19:40","20:00","20:10","20:22"],"B":["6:33","7:38","8:13","8:48","9:08","9:30","10:08","10:33","11:03","11:25","11:43","12:23","12:53","13:28","13:58","14:18","14:53","15:23","15:38","16:13","16:48","17:08","17:43","18:00","18:23","18:48","19:08","19:28","19:53","20:28","20:58","21:18"]}},"34":{"SAT":{"A":["6:30","7:17","8:10","9:05","10:05","10:30","11:02","11:52","12:20","13:05","13:40","14:30","15:20","15:40","16:25","17:35","18:00","18:22","19:35","21:00","21:10"],"B":["6:33","6:50","7:45","8:43","9:38","10:28","11:28","12:03","12:28","13:18","13:43","14:23","15:05","16:00","16:43","16:55","17:53","18:53","19:18","19:50","21:03"]},"SUN":{"A":["6:30","7:17","8:10","9:05","10:05","10:30","11:02","11:52","12:20","13:05","13:40","14:30","15:20","15:40","16:25","17:35","18:00","18:22","19:35","21:00","21:10"],"B":["6:33","6:50","7:45","8:43","9:38","10:28","11:28","12:03","12:28","13:18","13:43","14:23","15:05","16:00","16:43","16:55","17:53","18:53","19:18","19:50","21:03"]},"WD":{"A":["6:25","6:45","7:15","8:15","8:42","9:37","10:30","10:50","11:20","11:55","12:20","13:00","13:25","13:55","14:42","15:17","16:20","16:55","18:02","18:25","18:50","19:30","20:35","20:55","21:05"],"B":["8:45","6:32","7:40","8:15","8:35","9:33","10:08","10:58","11:48","12:18","12:43","13:18","13:48","14:18","14:43","15:15","16:13","16:38","17:43","18:23","19:28","19:53","20:13","20:53"]}},"3":{"SAT":{"A":["6:20","7:30","8:10","8:50","10:05","10:45","11:25","12:40","13:20","14:00","15:15","15:55","16:35","17:50","18:30","19:10","20:20","21:00"],"B":[]},"SUN":{"A":["6:20","7:30","8:10","8:50","10:05","10:45","11:25","12:40","13:20","14:00","15:15","15:55","16:35","17:50","18:30","19:10","20:20","21:00"],"B":[]},"WD":{"A":["6:30","7:30","7:55","8:20","8:45","9:15","10:05","10:30","10:55","11:20","11:55","12:45","13:10","13:35","14:00","14:25","15:15","15:40","16:05","16:30","17:00","17:50","18:15","18:40","19:05","19:35","20:25","20:50"],"B":[]}},"4-1":{"WD":{"A":["7:20","10:00","12:40","15:20","18:00","20:40"],"B":[]},"SAT":{"A":["7:00","9:40","12:20","15:00","17:40","20:25"],"B":[]},"SUN":{"A":["7:00","9:40","12:20","15:00","17:40","20:25"],"B":[]}},"41-2":{"SUN":{"A":["8:30","11:30","14:25","17:25"],"B":["9:45","12:45","15:40","18:40"]}},"41":{"SAT":{"A":["7:30","8:30","10:25","11:30","13:25","14:25","16:20","17:25","19:20","20:20"],"B":["6:50","8:45","9:45","11:40","12:45","14:40","15:40","17:35","18:40","20:35","21:30"]},"SUN":{"A":["7:30","8:30","10:25","11:30","13:25","14:25","16:20","17:25","19:20","20:20"],"B":["6:50","8:45","9:45","11:40","12:45","14:40","15:40","17:35","18:40","20:35","21:30"]},"WD":{"A":["6:25","7:30","8:30","9:20","10:25","11:30","12:20","13:25","14:25","15:15","16:20","17:25","18:15","19:20","20:20"],"B":["6:50","7:40","8:45","9:45","10:35","11:40","12:45","13:35","14:40","15:40","16:30","17:35","18:40","19:30","20:35","21:30"]}},"4":{"SAT":{"A":["6:25","7:40","8:20","9:00","10:20","11:00","11:40","13:00","13:40","14:20","15:40","16:20","17:00","18:20","19:00","19:40","21:05"],"B":[]},"SUN":{"A":["6:25","7:40","8:20","9:00","10:20","11:00","11:40","13:00","13:40","14:20","15:40","16:20","17:00","18:20","19:00","19:40","21:05"],"B":[]},"WD":{"A":["6:30","6:55","7:45","8:10","8:35","9:10","9:35","10:25","10:50","11:15","11:50","12:15","13:05","13:30","13:55","14:30","14:55","15:45","16:10","16:35","17:10","17:35","18:25","18:50","19:15","19:50","20:15","21:05"],"B":[]}},"5-2":{"WD":{"A":["7:20","10:10","12:50","15:40","18:40","21:20"],"B":[]},"SAT":{"A":["7:20","10:10","12:50","15:40","18:40","21:20"],"B":[]},"SUN":{"A":["7:20","10:10","12:50","15:40","18:40","21:20"],"B":[]}},"50":{"WD":{"A":["5:30","6:25","7:20","8:15","9:15","10:15","10:55","11:50","12:55","13:40","14:20","15:05","16:15","17:00","17:40","18:35","21:05","21:45"],"B":["6:45","7:50","8:55","9:50","10:35","11:35","12:15","13:10","14:15","15:00","15:40","16:30","17:45","18:45","19:20","20:05","21:45","23:00"]},"SAT":{"A":["5:30","6:25","7:20","8:15","9:15","10:15","10:55","11:50","12:55","13:40","14:20","15:05","16:15","17:00","17:40","18:35","21:05","21:45"],"B":["6:45","7:50","8:55","9:50","10:35","11:35","12:15","13:10","14:15","15:00","15:40","16:30","17:45","18:45","19:20","20:05","21:45","23:00"]},"SUN":{"A":["5:30","6:25","7:20","8:15","9:15","10:15","10:55","11:50","12:55","13:40","14:20","15:05","16:15","17:00","17:40","18:35","21:05","21:45"],"B":["6:45","7:50","8:55","9:50","10:35","11:35","12:15","13:10","14:15","15:00","15:40","16:30","17:45","18:45","19:20","20:05","21:45","23:00"]}},"51-1":{"SUN":{"A":["6:30","8:45","11:15","13:15","15:25","17:50","18:55","21:20"],"B":["7:45","10:05","12:35","14:35","16:50","19:20","20:20"]},"SAT":{"A":["6:20","7:10","8:45","10:25","11:20","12:50","13:40","15:20","17:00","17:55","19:30","21:10","21:50"],"B":["7:35","8:30","10:10","11:50","12:40","14:15","15:05","16:40","18:25","19:20","20:55"]},"WD":{"A":["7:00","8:15","8:35","9:50","10:30","11:45","12:45","14:15","15:00","16:10","16:50","18:25","19:35","20:00","20:30","21:20","22:00"],"B":["6:40","7:10","8:35","9:55","9:55","11:15","12:10","13:05","14:10","15:40","16:40","17:45","18:30","19:50","21:45"]}},"51":{"SUN":{"A":["7:45","9:55","12:00","14:25","16:35","20:05"],"B":["7:00","9:20","11:20","13:30","15:50","18:05","21:40"]},"SAT":{"A":["7:45","9:30","12:00","14:30","16:10","18:30","20:15"],"B":["7:00","9:25","10:55","13:30","15:55","17:40","20:00","21:50"]},"WD":{"A":["6:15","7:45","9:15","11:20","12:05","13:15","14:45","15:50","17:45","19:10"],"B":["7:00","7:45","9:25","10:45","12:45","13:30","14:40","16:10","17:20","19:15","20:35"]}},"52-1":{"WD":{"A":["6:05","6:35","7:15","7:40","8:05","8:30","9:05","9:40","10:15","10:45","11:15","11:40","12:15","12:55","13:35","13:55","14:30","14:55","15:30","16:05","16:35","17:10","17:40","18:10","18:40","19:25","19:45","20:20","20:45","21:10"],"B":["7:15","7:50","8:30","9:00","9:25","9:50","10:25","11:00","11:35","12:05","12:35","13:00","13:35","14:15","14:50","15:15","15:45","16:15","16:50","17:25","17:55","18:30","19:00","19:30","19:55","20:40","21:00","21:35","22:00"]},"SAT":{"A":["6:05","6:35","7:15","7:40","8:05","8:30","9:05","9:40","10:15","10:45","11:15","11:40","12:15","12:55","13:35","13:55","14:30","14:55","15:30","16:05","16:35","17:10","17:40","18:10","18:40","19:25","19:45","20:20","20:45","21:10"],"B":["7:15","7:50","8:30","9:00","9:25","9:50","10:25","11:00","11:35","12:05","12:35","13:00","13:35","14:15","14:50","15:15","15:45","16:15","16:50","17:25","17:55","18:30","19:00","19:30","19:55","20:40","21:00","21:35","22:00"]}},"55":{"SUN":{"A":["5:30","8:00","9:30","11:10","12:20","13:45","15:20","17:50","19:35","20:30"],"B":["7:10","9:50","11:20","13:00","14:10","15:35","17:20","19:50"]},"WD":{"A":["5:30","6:50","7:35","9:30","10:55","11:55","13:25","15:10","16:25","17:30","19:20","20:10"],"B":["7:10","8:40","9:25","11:15","12:40","13:40","15:15","16:55","18:15","19:25"]},"SAT":{"A":["5:30","6:50","7:35","9:30","10:55","11:55","13:25","15:10","16:25","17:30","19:20","20:10"],"B":["7:10","8:40","9:25","11:15","12:40","13:40","15:15","16:55","18:15","19:25"]}},"56":{"WD":{"A":["8:45","12:40","16:45"],"B":["10:25","14:20","18:25"]},"SAT":{"A":["8:45","12:40","16:45"],"B":["10:25","14:20","18:25"]},"SUN":{"A":["8:45","12:40","16:45"],"B":["10:25","14:20","18:25"]}},"57":{"WD":{"A":["6:10","10:25","11:30","17:00"],"B":["6:20","7:50","12:35","13:40","19:10"]},"SAT":{"A":["6:10","10:25","11:30","17:00"],"B":["6:20","7:50","12:35","13:40","19:10"]},"SUN":{"A":["6:10","10:25","11:30","17:00"],"B":["6:20","7:50","12:35","13:40","19:10"]}},"58":{"WD":{"A":["7:10","15:25"],"B":["8:55","17:15"]},"SAT":{"A":["7:10","15:25"],"B":["8:55","17:15"]},"SUN":{"A":["7:10","15:25"],"B":["8:55","17:15"]}},"59":{"WD":{"A":["6:30","7:20","8:05","9:05","10:10","10:55","11:45","12:50","13:35","14:25","15:30","16:20","17:05","18:15","19:20","20:05","20:50"],"B":["7:30","8:35","9:20","10:10","11:15","12:00","12:50","13:55","14:40","15:25","16:35","17:35","18:20","19:25","20:25","21:05","21:50"]},"SAT":{"A":["6:30","7:20","8:05","9:05","10:10","10:55","11:45","12:50","13:35","14:25","15:30","16:20","17:05","18:15","19:20","20:05","20:50"],"B":["7:30","8:35","9:20","10:10","11:15","12:00","12:50","13:55","14:40","15:25","16:35","17:35","18:20","19:25","20:25","21:05","21:50"]},"SUN":{"A":["6:30","7:20","8:05","9:05","10:10","10:55","11:45","12:50","13:35","14:25","15:30","16:20","17:05","18:15","19:20","20:05","20:50"],"B":["7:30","8:35","9:20","10:10","11:15","12:00","12:50","13:55","14:40","15:25","16:35","17:35","18:20","19:25","20:25","21:05","21:50"]}},"6":{"SUN":{"A":["6:20","10:20","14:00","17:50","21:30"],"B":["7:55","11:55","15:35","19:30"]},"SAT":{"A":["6:00","7:30","9:40","11:45","13:20","15:40","17:15","19:35","20:50"],"B":["7:30","9:15","11:15","13:20","14:55","17:20","18:55","21:05"]},"WD":{"A":["6:00","6:20","7:30","9:40","10:20","11:45","13:20","14:00","15:40","17:15","17:50","19:35","20:50","21:30"],"B":["7:30","7:55","9:15","11:15","11:55","13:20","14:55","15:35","17:20","18:55","19:30","21:05"]}},"7":{"SUN":{"A":["8:55","12:35","16:40","20:20"],"B":["7:00","10:30","14:10","18:20","21:50"]},"SAT":{"A":["6:40","8:55","11:00","12:35","14:40","16:40","18:30","20:20"],"B":["7:00","8:25","10:30","12:35","14:10","16:15","18:20","20:05","21:50"]},"WD":{"A":["6:40","8:55","11:00","12:35","14:40","16:40","18:30","20:20"],"B":["7:00","8:25","10:30","12:35","14:10","16:15","18:20","20:05","21:50"]}},"81":{"WD":{"A":["6:20","8:10","10:20","12:25","14:20","16:20","18:15"],"B":["7:05","9:00","11:10","13:10","15:05","17:05","19:00"]},"SAT":{"A":["6:20","8:10","10:20","12:25","14:20","16:20","18:15"],"B":["7:05","9:00","11:10","13:10","15:05","17:05","19:00"]},"SUN":{"A":["6:20","8:10","10:20","12:25","14:20","16:20","18:15"],"B":["7:05","9:00","11:10","13:10","15:05","17:05","19:00"]}},"82":{"SAT":{"A":["6:00","6:50","8:00","9:20","10:40","12:00","13:20","14:40","16:00","17:20","18:45","20:05"],"B":["6:40","7:50","9:10","10:30","11:50","13:10","14:30","15:50","17:10","18:30","19:55","21:00"]},"SUN":{"A":["6:00","6:50","8:00","9:20","10:40","12:00","13:20","14:40","16:00","17:20","18:45","20:05"],"B":["6:40","7:50","9:10","10:30","11:50","13:10","14:30","15:50","17:10","18:30","19:55","21:00"]},"WD":{"A":["6:00","8:00","10:40","13:20","16:00","18:45","20:05"],"B":["6:40","9:10","11:50","14:30","17:10","19:55","21:00"]}},"8":{"SAT":{"A":["6:00","6:45","7:25","9:15","10:05","10:55","12:40","13:35","14:20","16:10","17:05","17:55","19:35","20:20"],"B":["7:15","8:10","8:55","10:40","11:35","12:20","14:10","15:00","15:50","17:35","18:30","19:30"]},"SUN":{"A":["6:00","6:45","7:25","9:15","10:05","10:55","12:40","13:35","14:20","16:10","17:05","17:55","19:35","20:20"],"B":["7:15","8:10","8:55","10:40","11:35","12:20","14:10","15:00","15:50","17:35","18:30","19:30"]},"WD":{"A":["6:00","6:45","7:25","8:00","9:15","10:05","10:55","11:30","12:40","13:35","14:20","15:20","16:10","17:05","18:10","19:00","19:35","20:20"],"B":["7:15","8:10","8:55","9:30","10:40","11:35","12:20","13:00","14:10","15:00","15:50","16:50","17:35","18:30","19:40","20:30"]}},"90":{"WD":{"A":["6:20","7:00","7:25","8:20","9:25","9:45","10:15","10:35","11:00","11:20","12:20","12:40","13:10","13:30","13:55","14:25","15:05","15:35","16:05","16:25","16:50","17:25","18:10","18:45","19:15","19:35","20:05","20:35","21:50","22:55"],"B":["7:35","8:25","8:50","9:40","10:40","11:00","11:30","11:50","12:15","12:40","13:35","13:55","14:25","14:45","15:10","15:40","16:20","16:55","17:25","17:50","18:20","18:50","19:35","20:10","21:00","21:30","21:45","22:55"]},"SAT":{"A":["6:20","7:00","7:25","8:20","9:25","9:45","10:15","10:35","11:00","11:20","12:20","12:40","13:10","13:30","13:55","14:25","15:05","15:35","16:05","16:25","16:50","17:25","18:10","18:45","19:15","19:35","20:05","20:35","21:50","22:55"],"B":["7:35","8:25","8:50","9:40","10:40","11:00","11:30","11:50","12:15","12:40","13:35","13:55","14:25","14:45","15:10","15:40","16:20","16:55","17:25","17:50","18:20","18:50","19:35","20:10","21:00","21:30","21:45","22:55"]},"SUN":{"A":["6:20","7:00","7:25","8:20","9:25","9:45","10:15","10:35","11:00","11:20","12:20","12:40","13:10","13:30","13:55","14:25","15:05","15:35","16:05","16:25","16:50","17:25","18:10","18:45","19:15","19:35","20:05","20:35","21:50","22:55"],"B":["7:35","8:25","8:50","9:40","10:40","11:00","11:30","11:50","12:15","12:40","13:35","13:55","14:25","14:45","15:10","15:40","16:20","16:55","17:25","17:50","18:20","18:50","19:35","20:10","21:00","21:30","21:45","22:55"]}},"1(공영)":{"WD":{"A":["7:35","8:00","11:10","12:50","16:45"],"B":["7:50","10:25","11:30","13:55","17:00"]},"SAT":{"A":["7:35","8:00","11:10","12:50","16:45"],"B":["7:50","10:25","11:30","13:55","17:00"]},"SUN":{"A":["7:35","8:00","11:10","12:50","16:45"],"B":["7:50","10:25","11:30","13:55","17:00"]}},"10(공영)":{"WD":{"A":["8:10","11:00","14:10","16:30","19:30"],"B":["6:30"]},"SAT":{"A":["8:10","11:00","14:10","16:30","19:30"],"B":["6:30"]},"SUN":{"A":["8:10","11:00","14:10","16:30","19:30"],"B":["6:30"]}},"13(공영)":{"WD":{"A":["9:10","11:25","14:00","17:05"],"B":[]},"SAT":{"A":["9:10","11:25","14:00","17:05"],"B":[]},"SUN":{"A":["9:10","11:25","14:00","17:05"],"B":[]}},"14(공영)":{"WD":{"A":["7:05","10:25","13:00","16:05","19:10"],"B":["6:30"]},"SAT":{"A":["7:05","10:25","13:00","16:05","19:10"],"B":["6:30"]},"SUN":{"A":["7:05","10:25","13:00","16:05","19:10"],"B":["6:30"]}},"15(공영)":{"WD":{"A":["7:35","10:40","15:30","18:10"],"B":["6:50"]},"SAT":{"A":["7:35","10:40","15:30","18:10"],"B":["6:50"]},"SUN":{"A":["7:35","10:40","15:30","18:10"],"B":["6:50"]}},"16(공영)":{"WD":{"A":["11:00","13:10"],"B":[]},"SAT":{"A":["11:00","13:10"],"B":[]},"SUN":{"A":["11:00","13:10"],"B":[]}},"17(공영)":{"WD":{"A":["7:15","8:10","9:40","11:35","14:00","15:55","17:35","20:00"],"B":["6:37","7:45","8:40","10:05","12:05","14:30","16:40","18:40"]},"SAT":{"A":["7:15","8:10","9:40","11:35","14:00","15:55","17:35","20:00"],"B":["6:37","7:45","8:40","10:05","12:05","14:30","16:40","18:40"]},"SUN":{"A":["7:15","8:10","9:40","11:35","14:00","15:55","17:35","20:00"],"B":["6:37","7:45","8:40","10:05","12:05","14:30","16:40","18:40"]}},"18(공영)":{"WD":{"A":["11:00","18:50"],"B":["11:30","19:25"]},"SAT":{"A":["11:00","18:50"],"B":["11:30","19:25"]},"SUN":{"A":["11:00","18:50"],"B":["11:30","19:25"]}},"2(공영)":{"WD":{"A":["6:30","9:35","11:30"],"B":[]},"SAT":{"A":["6:30","9:35","11:30"],"B":[]},"SUN":{"A":["6:30","9:35","11:30"],"B":[]}},"20(공영)":{"WD":{"A":["7:50","15:20","17:25"],"B":["6:55","8:20","16:05"]},"SAT":{"A":["7:50","15:20","17:25"],"B":["6:55","8:20","16:05"]},"SUN":{"A":["7:50","15:20","17:25"],"B":["6:55","8:20","16:05"]}},"21(공영)":{"WD":{"A":["12:00"],"B":["14:10"]},"SAT":{"A":["12:00"],"B":["14:10"]},"SUN":{"A":["12:00"],"B":["14:10"]}},"27(공영)":{"WD":{"A":["6:45","18:50"],"B":["7:30","19:50"]},"SAT":{"A":["6:45","18:50"],"B":["7:30","19:50"]},"SUN":{"A":["6:45","18:50"],"B":["7:30","19:50"]}},"28(공영)":{"WD":{"A":["7:40","13:30","16:00"],"B":["8:20","14:40","16:45"]},"SAT":{"A":["7:40","13:30","16:00"],"B":["8:20","14:40","16:45"]},"SUN":{"A":["7:40","13:30","16:00"],"B":["8:20","14:40","16:45"]}},"29(공영)":{"WD":{"A":["10:45","13:10","16:50"],"B":["6:40","12:20","14:05","17:50"]},"SAT":{"A":["10:45","13:10","16:50"],"B":["6:40","12:20","14:05","17:50"]},"SUN":{"A":["10:45","13:10","16:50"],"B":["6:40","12:20","14:05","17:50"]}},"3(공영)":{"WD":{"A":["7:15","10:50","15:45","17:45"],"B":[]},"SAT":{"A":["7:15","10:50","15:45","17:45"],"B":[]},"SUN":{"A":["7:15","10:50","15:45","17:45"],"B":[]}},"30(공영)":{"WD":{"A":["9:00","14:00"],"B":["10:10","15:05"]},"SAT":{"A":["9:00","14:00"],"B":["10:10","15:05"]},"SUN":{"A":["9:00","14:00"],"B":["10:10","15:05"]}},"5(공영)":{"WD":{"A":["7:50","11:30","17:00"],"B":["9:40","13:10","18:15"]},"SAT":{"A":["7:50","11:30","17:00"],"B":["9:40","13:10","18:15"]},"SUN":{"A":["7:50","11:30","17:00"],"B":["9:40","13:10","18:15"]}},"6(공영)":{"WD":{"A":["6:55","7:50","10:00","11:20","12:30","14:40","16:00","18:25","20:00"],"B":["6:30"]},"SAT":{"A":["6:55","7:50","10:00","11:20","12:30","14:40","16:00","18:25","20:00"],"B":["6:30"]},"SUN":{"A":["6:55","7:50","10:00","11:20","12:30","14:40","16:00","18:25","20:00"],"B":["6:30"]}},"7(공영)":{"WD":{"A":["6:37","14:30","15:25","16:25","18:15","20:00"],"B":[]},"SAT":{"A":["6:37","14:30","15:25","16:25","18:15","20:00"],"B":[]},"SUN":{"A":["6:37","14:30","15:25","16:25","18:15","20:00"],"B":[]}},"8(공영)":{"WD":{"A":["7:00","9:50","12:00","15:10","18:10","19:30"],"B":[]},"SAT":{"A":["7:00","9:50","12:00","15:10","18:10","19:30"],"B":[]},"SUN":{"A":["7:00","9:50","12:00","15:10","18:10","19:30"],"B":[]}},"조조":{"WD":{"A":["5:55"],"B":[]},"SAT":{"A":["5:55"],"B":[]},"SUN":{"A":["5:55"],"B":[]}}};
+const HOLI=new Set(["2026-09-24","2026-09-25","2026-09-26","2026-10-03","2026-10-09","2026-12-25","2027-01-01","2027-03-01","2027-05-05","2027-06-06","2027-08-15","2027-10-03","2027-10-09","2027-12-25"]);
+function dayCat(d){const k=d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  if(HOLI.has(k)||d.getDay()===0)return'SUN';return d.getDay()===6?'SAT':'WD';}
+function showSched(no){
+  const old=document.getElementById('schedOv'); if(old){old.remove(); if(old.dataset.no===String(no))return;}
+  const now=new Date(), cat=dayCat(now), catNm={WD:'평일',SAT:'토요일',SUN:'일·공휴일'}[cat];
+  const day=(SCHED[no]||{})[cat];
+  const el=document.createElement('div'); el.id='schedOv'; el.dataset.no=String(no);
+  const cur=now.getHours()*60+now.getMinutes();
+  const col=(title,arr)=>{
+    if(!arr||!arr.length)return'<div class="sc"><h4>'+title+'</h4><div class="tt past">-</div></div>';
+    let nextHit=false;
+    return '<div class="sc"><h4>'+title+' ('+arr.length+'회)</h4>'+arr.map(hm=>{
+      const[h,m]=hm.split(':');const t=+h*60+ +m;
+      let cls='tt';
+      if(t<cur)cls+=' past';
+      else if(!nextHit){cls+=' next';nextHit=true;}
+      return '<div class="'+cls+'">'+hm+'</div>';}).join('')+'</div>';};
+  el.innerHTML='<div class="sh">🕐 '+esc(no)+'번 시간표 <span style="font-weight:400;color:var(--ink2);font-size:11px">'+catNm+'</span><span class="sx" onclick="this.closest(\'#schedOv\').remove()">✕</span></div>'
+    +'<div class="sn">※ 인가 시간표(계획)임 — 지도의 실시간 위치와는 별개이며 실제 운행과 다를 수 있음</div>'
+    +(day?'<div class="sb">'+col('기점 출발',day.A)+col('종점 출발',day.B)+'</div>'
+         :'<div class="sn" style="background:none;color:var(--ink2)">이 노선의 '+catNm+' 시간표 자료가 없습니다</div>');
+  document.querySelector('.maparea').appendChild(el);
+  const nx=el.querySelector('.next'); if(nx)nx.scrollIntoView({block:'center'});
+}
+function updateLegend(){
+  const sel=selected();
+  $('legRoutes').innerHTML=(routeMapInfo&&routeMapInfo.n?'<span class="dim" title="routemap.json 내장 노선도">[내장 '+routeMapInfo.n+'계통 '+routeMapInfo.date+']</span> ':'')+sel.map((n,i)=>'<span class="sq" style="background:'+SLOT_COL[i]+'"></span><span class="schBtn" title="인가 시간표 보기" onclick="showSched(\''+esc(n)+'\')">'+esc(n)+'번</span>🕐 ').join('')||'<span style="color:#999">노선 미선택</span>';
+}
+function paint(vs,now,stat){
+  tickNo++;
+  const ts=hhmmss(now), seen4={}; let shown=0, skipped=0;
+  vs.forEach(b=>{
+    const vn=String(b.vehicleno), v4=v4of(vn), co=company(vn);
+    const lat=+b.gpslati, lon=+b.gpslong, rt=String(b.routenm??'').trim();
+    const slotI=slotOf(rt); if(slotI<0){skipped++;return;} // 조회 계통에 다른 번호(예: 16 조회 시 16-1)가 섞여 오면 제외
+    if(!coFilter[co]) return; shown++;
+    // 속도·방향(직전 갱신 대비)
+    let spd='', brg=null;
+    if(spdTick===+now&&vn in spdCache){spd=spdCache[vn].s;brg=spdCache[vn].b;}
+    else{
+      const p=lastPos[vn];
+      if(p&&+p.t!==+now){const dt=(now-p.t)/3600000,km=hav(p.lat,p.lon,lat,lon);
+        if(dt>0){ if(km>0.02){spd=Math.round(km/dt);if(spd>95)spd='';brg=bearing(p.lat,p.lon,lat,lon);} else {spd=0;brg=p.brg??null;} } }
+      lastPos[vn]={lat,lon,t:now,brg:brg??(lastPos[vn]?.brg??null)};
+      if(spdTick!==+now){spdTick=+now;spdCache={};} spdCache[vn]={s:spd,b:lastPos[vn].brg};
+      brg=lastPos[vn].brg;
+    }
+    if(co==='대도'){seen4[v4]={b,spd};lastSeen[v4]={t:ts,nodenm:b.nodenm||'',routenm:rt};}
+    else otherSeen[vn]={co,routenm:rt,nodenm:b.nodenm||'',t:ts,d:now.toISOString().slice(0,10),live:tickNo};
+    let e=vehMarks[vn];
+    if(!e){
+      const el=busEl(v4,co,rt);
+      const ov=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(lat,lon),content:el,zIndex:co==='대도'?6:4});ov.setMap(map);
+      e=vehMarks[vn]={ov,el,lat,lon,curLat:lat,curLon:lon,anim:null,tick:tickNo,v4,co,rt,first:ts};
+      el.onclick=()=>{hlVeh=v4;$('veh').value=(v4 in VEH_GRP)?v4:'';refreshHighlight();renderAll();};
+      if(co==='대도'&&(!seenAt[v4]||(+now-seenAt[v4])>10*60000)) addEvent(ts,v4,'출발/포착','🚌 '+rt+'번 · '+(b.nodenm||''));
+    }else{ glide(e,lat,lon); e.tick=tickNo; e.el.classList.remove('stale'); }
+    if(co==='대도') seenAt[v4]=+now;
+    e.rt=rt; e.nodenm=b.nodenm||''; e.nodeord=b.nodeord; e.spd=spd; e.ts=ts;
+    const rtEl=e.el.querySelector('.rt'); if(rtEl){rtEl.textContent=rt;rtEl.style.background=SLOT_COL[slotI];rtEl.style.color='#fff';rtEl.style.display=$('showRt').checked?'':'none';}
+    const ar=e.el.querySelector('.ar'); if(ar){ if(brg!==null&&brg!==undefined){ar.style.display='';ar.style.transform='rotate('+Math.round(brg)+'deg)';} else ar.style.display='none'; }
+    e.el.title=vn+' ('+co+') | '+rt+'번 | '+(b.nodenm||'')+' | 순번 '+(b.nodeord||'')+(spd!==''?' | 구간속도 '+spd+'km/h':'')+' | '+ts;
+    e.el.classList.toggle('hl',v4===hlVeh);
+    if(rec) logRows.push([ts,vn,co,rt,b.nodenm||'',b.nodeord||'',spd===''?'':spd]);
+  });
+  if(logRows.length>MAX_LOG) logRows.splice(0,logRows.length-MAX_LOG);
+  // 미수신 차량: 유지 → 지연 표시 → 장기 미수신 시 제거(입고 추정 이벤트)
+  Object.entries(vehMarks).forEach(([vn,e])=>{
+    const gap=tickNo-e.tick;
+    if(gap>=DROP_TICKS){ if(e.anim)cancelAnimationFrame(e.anim); e.ov.setMap(null); delete vehMarks[vn];
+      if(e.co==='대도') addEvent(ts,e.v4,'신호 소실(입고 추정)','마지막 '+e.ts+' '+(e.nodenm||'')+' · '+e.rt+'번'); }
+    else if(gap>=STALE_TICKS){ e.el.classList.add('stale'); e.el.title=e.el.title.split(' | 신호')[0]+' | 신호 지연('+gap+'회 미수신, 마지막 위치 유지)'; }
+  });
+  // 대도 배정 현황
+  const grps=new Set(selected().map(n=>NO_GRP[n]).filter(Boolean));
+  const fleetShown=Object.entries(VEH_GRP).filter(([v4,g])=>grps.has(g)||seen4[v4]);
+  // 따라가기
+  if($('follow').checked&&hlVeh){const fe=Object.values(vehMarks).find(e=>e.v4===hlVeh);if(fe)map.panTo(new kakao.maps.LatLng(fe.lat,fe.lon));}
+  // 상태줄
+  const modeNm=selected().map(n=>n+'번').join('·')+(skipped?' (타번호 '+skipped+'대 제외)':'');
+  if(quotaHit) setLed('bad','⚠ API 일일 트래픽 한도 초과(코드22) — 공공데이터포털에서 트래픽 증가 신청 필요, 내일 0시 초기화');
+  else if(stat.rate>0&&!commFail) setLed('warn',modeNm+' | 포착 '+(vs.length-skipped)+'대(표시 '+shown+') | '+ts+' | 초당 요청제한(코드23) 감지 → 자동 감속(현재 '+rps+'건/초)');
+  else if(commFail) setLed('bad','⚠ 위치 데이터 수신 실패 ('+ts+') — 인터넷 확인. 폰에서 미리보기(content://)로 열면 차단됨: 내 파일에서 길게 눌러 [Chrome으로 열기]'+(lastOkAt?' · 마지막 정상 수신 '+hhmmss(lastOkAt):''));
+  else if(partialFail) setLed('warn',modeNm+' | 포착 '+(vs.length-skipped)+'대(표시 '+shown+') | 일부 호출 실패('+stat.err+'/'+(stat.ok+stat.err)+') '+ts);
+  else setLed('ok',modeNm+' | 포착 '+(vs.length-skipped)+'대(표시 '+shown+') | '+ts+(rec?' | 기록 '+logRows.length+'행':''));
+  $('ptime').textContent='('+ts+')';
+  if(stopOv&&stopOv._sid){openStop(stopOv._sid);}
+  renderAll(fleetShown,seen4);
+  saveRoster();
+}
+function refreshHighlight(){Object.values(vehMarks).forEach(e=>e.el.classList.toggle('hl',e.v4===hlVeh));}
+function addEvent(ts,v4,type,detail){events.unshift({ts,v4,type,detail});if(events.length>300)events.length=300;}
+
+/* ===================== 패널 ===================== */
+let _fleetShown=[], _seen4={};
+function renderAll(fleetShown,seen4){
+  if(fleetShown){_fleetShown=fleetShown;_seen4=seen4;}
+  renderKpi(); if(curTab==='daedo') renderFleet(); else if(curTab==='log') renderLog(); else renderRoster();
+}
+function renderKpi(){
+  const run=_fleetShown.filter(([v])=>_seen4[v]).length;
+  $('kRun').textContent=commFail?'⚠':run; $('kIdle').textContent=commFail?'-':(_fleetShown.length-run);
+  const live=Object.values(otherSeen).filter(o=>o.live===tickNo);
+  $('kDs').textContent=live.filter(o=>o.co==='동신').length;$('kJp').textContent=live.filter(o=>o.co==='진평').length;$('kGy').textContent=live.filter(o=>o.co==='공영').length;
+}
+function fuelPanelHtml(){
+  const list=f=>Object.values(FLEET).flat().filter(v=>FUEL[v]===f).sort().join(', ');
+  return ['H2','CNG'].map(f=>'<div class="fr"><img src="'+FUEL_IMG[f]+'" alt="'+FUEL_NAME[f]+' 버스">'
+    +'<div><div class="ttl"><span class="fu fu-'+f+'">'+FUEL_LABEL[f]+'</span> '+FUEL_NAME[f]+' '
+    +Object.values(FLEET).flat().filter(v=>FUEL[v]===f).length+'대</div>'
+    +'<div class="nos">'+list(f)+'</div></div></div>').join('')
+    +'<div class="nos">\u203b \uadfc\uac70: \u300c\ub300\ub3c4\uc5ec\uac1d_\ucc28\ub7c9\uad00\ub9ac\ub300\uc7a5_\ud1b5\ud569.xlsx\u300d \ucc28\ub7c9\ucd1d\uad04 \uc2dc\ud2b8 \u2018\uc5f0\ub8cc\u2019 \ud56d\ubaa9</div>';
+}
+function toggleFuelPanel(){
+  const p=document.getElementById('fuelPanel');
+  if(!p.innerHTML) p.innerHTML=fuelPanelHtml();
+  p.style.display = p.style.display==='block' ? 'none' : 'block';
+}
+function renderFleet(){
+  const run=_fleetShown.filter(([v])=>_seen4[v]).sort((a,b)=>a[0].localeCompare(b[0]));
+  const idle=_fleetShown.filter(([v])=>!_seen4[v]).sort((a,b)=>a[0].localeCompare(b[0]));
+  let h='<tr class="sechead"><td colspan="6">🟢 운행 중 '+run.length+'대</td></tr>';
+  run.forEach(([v4,g])=>{const s=_seen4[v4],b=s.b,m=Object.values(vehMarks).find(e=>e.v4===v4);
+    h+=`<tr class="clk${v4===hlVeh?' sel':''}" data-v="${v4}" data-lat="${b.gpslati}" data-lon="${b.gpslong}"><td><span class="co" style="background:${FUEL_COL[FUEL[v4]]||'#c2185b'}"></span>${fuBadge(v4)}<b>${v4}</b></td><td>${g}</td><td class="run">운행</td><td>${esc(b.nodenm||'')}${s.spd!==''?' <span style="color:#888">'+s.spd+'㎞/h</span>':''}</td><td>${esc(b.routenm)}${NO_GRP[String(b.routenm)]!==undefined&&NO_GRP[String(b.routenm)]!==g?' <span class="warnc" title="배정과 다른 노선">≠</span>':''}</td><td style="color:#888">${m?m.ts:''}</td></tr>`;});
+  h+=commFail?'<tr class="sechead"><td colspan="6" class="warnc">⚠ 수신 실패 — 아래 '+idle.length+'대는 확인 불가(대기로 단정 불가)</td></tr>'
+             :'<tr class="sechead"><td colspan="6">미포착 '+idle.length+'대 (선택 노선 배정 차량 중 신호 없음 — 차고지 대기·검사·타노선 투입 등)</td></tr>';
+  idle.forEach(([v4,g])=>{const ls=lastSeen[v4];
+    h+=`<tr class="clk${v4===hlVeh?' sel':''}" data-v="${v4}"><td><span class="co" style="background:#9aa4ad"></span>${fuBadge(v4)}${v4}</td><td>${g}</td><td class="idle">${commFail?'확인불가':'미포착'}</td><td class="idle">${ls?'마지막 '+ls.t+' '+esc(ls.nodenm):'-'}</td><td class="idle">${ls?esc(ls.routenm):'-'}</td><td></td></tr>`;});
+  h='<tr class="sechead"><td colspan="6">\ud83d\ude8c \ucc28\uc885 \uad6c\ubd84 '
+    +'<span class="fuBtn" onclick="toggleFuelPanel()">\uc0ac\uc9c4\u00b7\ucc28\ub7c9\ubc88\ud638 \ubcf4\uae30/\uc228\uae30\uae30</span></td></tr>'+h;
+  $('fleetB').innerHTML=h;
+  $('fleetB').querySelectorAll('tr.clk').forEach(tr=>tr.onclick=()=>{hlVeh=tr.dataset.v;$('veh').value=hlVeh in VEH_GRP?hlVeh:'';
+    if(tr.dataset.lat){map.setLevel(4);map.panTo(new kakao.maps.LatLng(+tr.dataset.lat,+tr.dataset.lon));}else{map.setLevel(5);map.panTo(new kakao.maps.LatLng(DEPOT.lat,DEPOT.lon));}
+    refreshHighlight();renderFleet();});
+}
+function renderRoster(){
+  const co=curTab, rows=Object.entries(otherSeen).filter(([,o])=>o.co===co), today=new Date().toISOString().slice(0,10);
+  const live=rows.filter(r=>r[1].live===tickNo).sort((a,b)=>a[0].localeCompare(b[0])), old=rows.filter(r=>r[1].live!==tickNo).sort((a,b)=>(b[1].d+b[1].t).localeCompare(a[1].d+a[1].t));
+  let h='<tr class="sechead"><td colspan="5">🟢 지금 운행 중 '+live.length+'대</td></tr>';
+  live.forEach(([vn,o])=>{const e=vehMarks[vn];h+=`<tr class="clk${v4of(vn)===hlVeh?' sel':''}" data-vn="${vn}" ${e?`data-lat="${e.lat}" data-lon="${e.lon}"`:''}><td><span class="co" style="background:${CO_COL[co]}"></span><b>${v4of(vn)}</b></td><td class="run">운행</td><td>${esc(o.routenm)}</td><td>${esc(o.nodenm)}</td><td>${o.t}</td></tr>`;});
+  h+='<tr class="sechead"><td colspan="5">최근 포착 이력 '+old.length+'대 (이 기기에서 누적)</td></tr>';
+  old.forEach(([vn,o])=>{h+=`<tr><td><span class="co" style="background:#9aa4ad"></span>${v4of(vn)}</td><td class="idle">미포착</td><td class="idle">${esc(o.routenm)}</td><td class="idle">${esc(o.nodenm)}</td><td class="idle">${o.d===today?o.t:o.d}</td></tr>`;});
+  if(!rows.length) h='<tr><td colspan="5" style="color:#888;padding:14px">아직 포착된 '+co+' 차량이 없습니다. 노선을 [◎ 원주 모든 노선]으로 두면 자동 수집됩니다.</td></tr>';
+  $('rosterB').innerHTML=h;
+  $('rosterB').querySelectorAll('tr.clk').forEach(tr=>tr.onclick=()=>{hlVeh=v4of(tr.dataset.vn);if(tr.dataset.lat){map.setLevel(4);map.panTo(new kakao.maps.LatLng(+tr.dataset.lat,+tr.dataset.lon));}refreshHighlight();renderRoster();});
+}
+function renderLog(){
+  $('events').innerHTML=events.slice(0,60).map(ev=>`<div class="ev"><b>${ev.ts}</b> <span style="color:#c2185b;font-weight:700">${ev.v4}</span> ${esc(ev.type)} <span style="color:#666">${esc(ev.detail)}</span></div>`).join('')||'<div class="ev" style="color:#888">아직 이벤트가 없습니다. (차량이 처음 포착되면 "출발/포착", 장기 미수신이면 "입고 추정"으로 기록)</div>';
+  $('evCnt').textContent=events.length+'건';
+  const last=logRows.slice(-150).reverse();
+  $('logB').innerHTML=last.map(r=>`<tr><td>${r[0]}</td><td><span class="co" style="background:${CO_COL[r[2]]||'#607d8b'}"></span>${String(r[1]).slice(-4)}</td><td>${r[2]}</td><td>${esc(r[3])}</td><td>${esc(r[4])}</td><td>${r[5]}</td><td>${r[6]!==''?r[6]+'㎞/h':''}</td></tr>`).join('')||'<tr><td colspan="7" style="color:#888;padding:12px">[● 기록]을 누르면 갱신마다 위치가 여기에 쌓이고 CSV로 저장할 수 있습니다.</td></tr>';
+  $('logCnt').textContent=logRows.length+'행';
+}
+function setTab(t){curTab=t;document.querySelectorAll('#tabs .tab').forEach(el=>el.classList.toggle('on',el.dataset.t===t));
+  $('fleet').style.display=t==='daedo'?'':'none';$('roster').style.display=(t!=='daedo'&&t!=='log')?'':'none';$('log').style.display=t==='log'?'':'none';renderAll();}
+function csv(){
+  if(!logRows.length&&!events.length){alert('저장할 기록이 없습니다. [● 기록]을 켜두면 위치 기록이 쌓입니다.');return;}
+  let out='﻿구분,시각,차량번호,회사,노선,통과정류장,정류장순번,구간속도(km/h),비고\n';
+  events.slice().reverse().forEach(e=>{out+=['이벤트',e.ts,e.v4,'대도','','','','',e.type+' '+e.detail].map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')+'\n';});
+  logRows.forEach(r=>{out+=['위치',...r,''].map(x=>'"'+String(x).replace(/"/g,'""')+'"').join(',')+'\n';});
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out],{type:'text/csv'}));const d=new Date();
+  a.download='관제기록_'+d.getFullYear()+String(d.getMonth()+1).padStart(2,'0')+String(d.getDate()).padStart(2,'0')+'_'+String(d.getHours()).padStart(2,'0')+String(d.getMinutes()).padStart(2,'0')+'.csv';a.click();
+}
+
+/* ===================== 차량 검색 ===================== */
+async function vehSearch(){
+  const v4=$('veh').value; if(!v4){hlVeh='';refreshHighlight();renderAll();return;}
+  hlVeh=v4; refreshHighlight(); renderAll();
+  const cur=Object.values(vehMarks).find(e=>e.v4===v4);
+  if(cur){map.setLevel(4);map.panTo(new kakao.maps.LatLng(cur.lat,cur.lon));setLed('ok',v4+'호: '+cur.rt+'번 운행 중 | '+cur.nodenm);return;}
+  const g=VEH_GRP[v4]; const nos=(GRP_NOS[g]&&GRP_NOS[g].length)?[...GRP_NOS[g],...Object.keys(NO_GRP).filter(n=>!GRP_NOS[g].includes(n))]:Object.keys(NO_GRP);
+  setLed('','' +v4+'호 검색 중 (배정 '+g+')…');
+  const ids=[];nos.forEach(n=>(routes[n]||[]).forEach(id=>{if(isWonju(id))ids.push(id);}));
+  let hit=null;
+  await pool(ids,async rid=>{if(hit)return;const list=await api('BusLcInfoInqireService/getRouteAcctoBusLcList','cityCode='+CITY+'&routeId='+rid+'&numOfRows=100&pageNo=1');const h=(list||[]).find(b=>String(b.vehicleno).endsWith(v4));if(h&&!hit)hit=h;},12);
+  if(hit){map.setLevel(4);map.panTo(new kakao.maps.LatLng(+hit.gpslati,+hit.gpslong));setLed('ok',v4+'호: '+hit.routenm+'번 운행 중 | '+(hit.nodenm||'')+(NO_GRP[String(hit.routenm)]!==g?' (배정 '+g+'과 다른 노선 투입)':''));refresh();}
+  else{setLed('warn',v4+'호: 현재 운행 신호 없음 — 차고지 대기·검사·미운행 추정'+(lastSeen[v4]?' (마지막 포착 '+lastSeen[v4].t+' '+lastSeen[v4].nodenm+')':''));map.setLevel(5);map.panTo(new kakao.maps.LatLng(DEPOT.lat,DEPOT.lon));}
+}
+
+/* ===================== 통합 검색 ===================== */
+let qMatches=[],qIdx=-1,qLast='';
+function doSearch(){
+  const q=($('q').value||'').trim();
+  if(!q) return;
+  // 숫자 → 차량 검색
+  if(/^\d{2,4}$/.test(q)){
+    const v4=q.padStart(4,'0').slice(-4);
+    // 화면에 이미 있는 차량(타사 포함)
+    const cur=Object.values(vehMarks).find(e=>e.v4.endsWith(q)||e.v4===v4);
+    if(cur){hlVeh=cur.v4;refreshHighlight();renderAll();map.setLevel(4);map.panTo(new kakao.maps.LatLng(cur.lat,cur.lon));setLed('ok',cur.v4+'호: '+cur.rt+'번 운행 중 | '+(cur.nodenm||''));return;}
+    if(v4 in VEH_GRP){$('veh').value=v4;vehSearch();return;}
+    setLed('warn',q+'호: 현재 선택한 노선에서 포착되지 않음 — 그 차량이 다니는 노선을 선택하면 표시됩니다');
+    return;
+  }
+  // 문자 → 정류장 검색 (선택 노선의 정류장 색인에서)
+  const norm=x=>String(x).replace(/\s+/g,'');
+  const nq=norm(q);
+  if(q!==qLast){const seen={};qMatches=[];
+    [stopData,stopAll].forEach(src=>Object.entries(src).forEach(([id,d])=>{if(!seen[id]&&norm(d.nm).includes(nq)){seen[id]=1;qMatches.push(id);}}));
+    qIdx=-1;qLast=q;}
+  if(!qMatches.length){setLed('warn','"'+q+'" 정류장을 전 노선(179계통)에서 찾지 못했습니다');return;}
+  qIdx=(qIdx+1)%qMatches.length;
+  const d=stopData[qMatches[qIdx]]||stopAll[qMatches[qIdx]];
+  map.setLevel(3);map.panTo(new kakao.maps.LatLng(d.lat,d.lon));
+  openStop(qMatches[qIdx]);
+  setLed('ok','정류장 "'+d.nm+'" ('+(qIdx+1)+'/'+qMatches.length+(qMatches.length>1?' — 다시 검색하면 다음 결과':'')+')');
+}
+
+/* ===================== 정류장 자동완성 ===================== */
+let acItems=[],acIdx=-1;
+function acHide(){$('qList').style.display='none';acItems=[];acIdx=-1;}
+function acPick(nm){$('q').value=nm;acHide();qLast='';doSearch();}
+function acRender(){
+  const box=$('qList');
+  if(!acItems.length){acHide();return;}
+  box.innerHTML=acItems.map((it,i)=>'<div class="qi'+(i===acIdx?' on':'')+'" data-i="'+i+'">🚏 '+esc(it.nm)+' <span style="flex:1"></span>'+it.badges+'</div>').join('');
+  box.style.display='block';
+  box.querySelectorAll('.qi').forEach(el=>{
+    el.onmousedown=ev=>{ev.preventDefault();acPick(acItems[+el.dataset.i].nm);};
+  });
+}
+function acUpdate(){
+  const q=($('q').value||'').trim();
+  if(q.length<2||/^\d+$/.test(q)){acHide();return;}
+  const norm=x=>String(x).replace(/\s+/g,'');
+  const nq=norm(q);
+  const byName={};
+  const scan=(src,hasSlot)=>Object.values(src).forEach(d=>{
+    if(!norm(d.nm).includes(nq)) return;
+    const e=byName[d.nm]||(byName[d.nm]={nm:d.nm,nos:{}});
+    d.rts.forEach(r=>{const k=String(r.routeNo),si=(hasSlot&&r.slotI!==undefined)?r.slotI:'';
+      if(e.nos[k]===undefined||si!=='')e.nos[k]=si;});   // 같은 노선이면 선택 노선 색이 우선
+  });
+  scan(stopAll,false); scan(stopData,true);   // 전 정류장(179계통) 대상 자동완성
+  acItems=Object.values(byName).slice(0,8).map(e=>({nm:e.nm,
+    badges:Object.entries(e.nos).map(([no,si])=>'<span class="rb" style="background:'+(si!==''?SLOT_COL[+si]:'#607d8b')+'">'+esc(no)+'</span>').join(' ')}));
+  acIdx=-1;acRender();
+}
+
+/* ===================== 타이머·초기화 ===================== */
+function setTimer(){
+  if(timer){clearInterval(timer);timer=null;}
+  let s=+$('ivl').value;
+  if(s>0&&targetRouteIds().length>12&&s<5) s=5;
+  if(s>0) timer=setInterval(()=>{if(!document.hidden)refresh();},s*1000);
+}
+function relayout(){if(map&&map.relayout)setTimeout(()=>map.relayout(),80);}
+function init(){
+  map=new kakao.maps.Map($('map'),{center:new kakao.maps.LatLng(37.3600,127.9500),level:8});
+  map.addControl(new kakao.maps.ZoomControl(),kakao.maps.ControlPosition.RIGHT);
+  window.addEventListener('resize',relayout);
+  document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
+  // 설정 복원
+  if(cfg.ivl!==undefined)$('ivl').value=String(cfg.ivl);
+  ['showPath','showStops','showRt'].forEach(k=>{if(cfg[k]!==undefined)$(k).checked=!!cfg[k];});
+  if(cfg.co)Object.keys(coFilter).forEach(k=>{if(cfg.co[k]!==undefined)coFilter[k]=!!cfg.co[k];});
+  // 회사 칩
+  const cc=$('coChips');
+  Object.entries(CO_COL).forEach(([co,col])=>{const s=document.createElement('span');s.className='chip'+(coFilter[co]?'':' off');s.innerHTML='<span class="cdot" style="background:'+col+'"></span>'+co;
+    s.onclick=()=>{coFilter[co]=!coFilter[co];s.classList.toggle('off',!coFilter[co]);resetAllMarks();if(lastVs)paint(lastVs,lastTs,{ok:1,err:0});saveCfg();};
+    cc.appendChild(s);});
+  // 차량 선택
+  const vs=$('veh');Object.entries(FLEET).forEach(([g,arr])=>{const og=document.createElement('optgroup');og.label=g+'번 배정';arr.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v+'호';og.appendChild(o);});vs.appendChild(og);});
+  ['r1','r2','r3'].forEach(id=>$(id).onchange=()=>{hlVeh='';$('veh').value='';resetAllMarks();updateLegend();drawPath();setTimer();saveCfg();refresh();});
+  $('veh').onchange=vehSearch;
+  $('qBtn').onclick=()=>{acHide();doSearch();};
+  $('q').addEventListener('input',acUpdate);
+  $('q').addEventListener('blur',()=>setTimeout(acHide,150));
+  $('q').addEventListener('keydown',e=>{
+    if(e.key==='ArrowDown'&&acItems.length){e.preventDefault();acIdx=(acIdx+1)%acItems.length;acRender();return;}
+    if(e.key==='ArrowUp'&&acItems.length){e.preventDefault();acIdx=(acIdx-1+acItems.length)%acItems.length;acRender();return;}
+    if(e.key==='Escape'){acHide();return;}
+    if(e.key==='Enter'){e.preventDefault();
+      if(acIdx>=0&&acItems[acIdx]){acPick(acItems[acIdx].nm);return;}
+      acHide();doSearch();}
+  });
+  $('ivl').onchange=()=>{setTimer();saveCfg();};
+  $('refresh').onclick=()=>refresh();
+  $('showPath').onchange=()=>{drawPath();saveCfg();};
+  $('showStops').onchange=()=>{drawPath();saveCfg();};
+  $('showRt').onchange=()=>{Object.values(vehMarks).forEach(e=>{const r=e.el.querySelector('.rt');if(r)r.style.display=$('showRt').checked?'':'none';});saveCfg();};
+  $('panelToggle').onclick=()=>{$('panel').classList.toggle('min');relayout();};
+  $('hdrToggle').onclick=()=>{$('hdrBody').classList.toggle('open');relayout();};
+  if(window.innerWidth<=820){$('panel').classList.add('min');}
+  document.querySelectorAll('#tabs .tab').forEach(el=>el.onclick=()=>setTab(el.dataset.t));
+  $('recBtn').onclick=function(){rec=!rec;this.textContent=rec?'■ 기록 중지':'● 기록';this.classList.toggle('rec',rec);$('recState').textContent=rec?'●':'';if(rec)setTab('log');};
+  $('csvBtn').onclick=csv;
+  loadGH().then(()=>drawPath());
+  loadRoutes();
+}
+/* 임직원 배포용: 기록·CSV 숨김 — 주소 뒤에 ?admin 붙이면 표시(관리자용) */
+if(!/[?&]admin/.test(location.search)){
+  ['recBtn','csvBtn'].forEach(i=>{const e=document.getElementById(i);if(e)e.style.display='none';});
+  const lt=document.querySelector('.tab[data-t="log"]');if(lt)lt.style.display='none';
+}
+/* ── 접속코드(발급제) — 노무안전팀이 지급한 코드가 있어야 화면이 열림 ──
+   코드 원문은 이 파일에 없음(SHA-256 해시만 내장). 코드 회수 = 해당 해시 삭제 후 재업로드 */
+const GATE=[
+'2f975dc85eeab96eb1a89218b1d1cd622ac75750f82acebfaf4ea50418ac5fd9',
+'7df23115de09e394d30a7cc3d08bc0fb496b1a12643ca14dd8ef1745391caa83',
+'830766c476088eae7c8a4a9e8fd0021b799e8d5b6290f589e81a9f48bc3db234',
+'f6d26a40bda32602a068fbe61d8f9864ea330df839043ec92569dc2527d9f77d',
+'a73d6b38204103cc7455b9180a4693a382397cffd9e5753d019f6d1d1da31cd1',
+'c97a27297d0c5c21f3a4e20443d243ec07628cf93a25d096673c9f1b4cb82b57',
+'6d32c43303c70099402c72744bb49c4b461b7871a1a359a99ccbcc99aa1d1d3c',
+'4cefa59840f797266cb61b350772698a9e00c4e9665bd7cee02cf242e835e38d',
+'6b18c84b102f9174b1359960a9c48f4fccb0f9a0324c6efbc7c883a393399c11',
+'fd75523c074f992bbaa1c3a923037ebe264e0d938a4df3717618029ea9c3b857',
+'c7af9f615049081f828a619bae2468f37704811fb9c39027f51b3404e7061806',
+'f5b5d5ac55957358967b1215612f0b3f0efcd2e9e7f4f2d3483aed5647aeb603',
+'ef24c0268982ee2c47d1f1871aad324776782b677b8277b188379ae1b1bc6dc2',
+'c9ca890311e8ec56ce46eb17e1277de3638d42eea4f43c68e36542fcf45ce8de',
+'6cf716f945b6c5efff4fc6d0cb68b5d15c4735f021ab7098553cbfd2218215fe',
+'b9c91f98541acbe2ce05e6d2333f2df99a079c3bd8cb1bfaec91e5b690e2d054',
+'152080a55a8614451e3a0efb4dc7fa8f984f9d951c9398d4f6f1db18d79393d2',
+'5f09a409370828e760232c3935acfdb0d7a1c7b713998766a55b9999f0945276',
+'fd0eff4ede72da01f73542490487742c866738880ba0d59837457a5f1cd2515f',
+'a6f5cd13c40ce9d4c024c3430ab2f6b78a04e8236a11ca63ae4273c70933bc46',
+'765ef998785a3708ea8c26eb454f13eef53816a4e391b517ecf9e5c023fb39d8',
+'a06e687ea6f8c888bf08dadb54484f6be15c528da3f5f08330704be3c8454dec',
+'fec6d425a1141268e10513034826e5e5c35f59c00d5ea43e6a15cffee8a9def6',
+'0b5e7d428ffb2d05a84b14ce1aaabef9775798f902b95ab9495578d229f21e14',
+'ee6af57f4aeaf0cd5ffa4c9798ea616d888b558615b2063e4da6e580966a53a0',
+'99f902760c8bc284268a80ca9aeb634be83e8bd7810b6d116cd13295c61097aa',
+'451b00dcb4cd360a19d448d13848853e3019194c0de2a53e9c22de6c761b8e09',
+'123bf4954c351f774ec8680503be09c57f6c1270a46140378bdbe2a6650211e6',
+'905aec87ac3cd5e44f2c0206cb1ceaaa9fe95b5420a62030f3f8974d72a4583a',
+'6329e75643d753e92242c17baffcb9e9045b8b6373a004a838d73b5704883550',
+'0a40c01b0940d4cf26198ba22aa6831fbdb0c2c8d059a4eb54e110d423819e70',
+'1ddb2df03a1437a2317b972dbbb9d58f2d73091ce898df7cbd724cd7212c77c0',
+'54550d6cf11ef1cd627ef6556c1e98d3570888cd9668da30766703546c9c4576',
+'2cad2543e310c32b7e527efaa080f3743010074105144a1a061fd7b34a92b643',
+'fdb11797df1e1726ddd55562e6bc0474ef96f3d8327c0a330590fdc71b156008',
+'6383b4e1e007e3be9d094d9fde1e2af62254129b33e6aef2d0a957eeeec8f724',
+'a36ab703065c4d269ed8649ceb4164de6b360ad0b26454236de4fbcadda3d034',
+'00b7e41944c97b2fadc09757e6e3a4687d2e8e56f0822f37a9e95826c3c6fc3f',
+'2750cfcabe627840fa51ecd303c9da89b4dfed4300b9eb8ea804d17e22339e90',
+'4f6727ec32f95d1ecb5b6dd96fe70fe847af61b00d568781b61f20bf77254f6e'
+];
+const GURL='https://script.google.com/macros/s/AKfycbzEa8g20M5wUyNpn_ns8e8J16dDninPLlnFNoFKAlTk_4B3kz7QRGlOx45mwZzTOS_t/exec';   // 접속관리 구글시트(기록·기기제한·즉시차단)
+function devId(){let d='';try{d=localStorage.getItem('wj_dev')||'';}catch(e){}
+  if(!d){d=Date.now().toString(36)+Math.random().toString(36).slice(2,10);try{localStorage.setItem('wj_dev',d);}catch(e){}}
+  return d;}
+async function sha(t){const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t));return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join('');}
+async function gateOk(c){   // {ok,msg} — ① 구글시트에서 확인(기록 남음) ② 시트 무응답 시에만 내장 해시로 판정
+  c=String(c||'').trim().toUpperCase(); if(!c)return {ok:false,msg:''};
+  try{
+    const ctl=new AbortController(); const tm=setTimeout(()=>ctl.abort(),9000);
+    const r=await fetch(GURL+'?c='+encodeURIComponent(c)+'&d='+encodeURIComponent(devId())+'&i='+encodeURIComponent(navigator.userAgent.slice(0,110)),{signal:ctl.signal});
+    clearTimeout(tm);
+    const j=await r.json();
+    if(j&&typeof j.ok==='boolean')return {ok:j.ok,msg:j.msg||'코드가 올바르지 않습니다.'};
+  }catch(e){}
+  try{return {ok:GATE.includes(await sha(c)),msg:'코드가 올바르지 않습니다. 노무안전팀에 문의하세요.'};}catch(e){return {ok:false,msg:'확인에 실패했습니다. 잠시 후 다시 시도해 주세요.'};}
+}
+function boot(){if(window.kakao&&kakao.maps){kakao.maps.load(init);} else {$('keywarn').style.display='flex';}}
+(async()=>{
+  if(!(window.crypto&&crypto.subtle)||location.protocol==='file:'){boot();return;}   // 로컬 파일 테스트는 통과
+  let c='';try{c=localStorage.getItem('wj_gate')||'';}catch(e){}
+  if(c&&(await gateOk(c)).ok){boot();return;}
+  const g=document.createElement('div');
+  g.style.cssText='position:fixed;inset:0;z-index:9999;background:#f0f2f5;display:flex;align-items:center;justify-content:center;padding:20px';
+  g.innerHTML='<div style="background:#fff;border:1px solid #dde;border-radius:12px;padding:26px 24px;max-width:330px;width:100%;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.12)">'
+   +'<div style="font-size:30px">🚌</div><h2 style="font-size:16px;margin:8px 0 4px">대도여객 실시간 관제</h2>'
+   +'<p style="font-size:12px;color:#667;line-height:1.6;margin-bottom:12px">임직원 전용 화면입니다.<br>노무안전팀에서 받은 <b>접속코드</b>를 입력하세요.</p>'
+   +'<input id="gc" style="width:100%;padding:10px;border:1px solid #bcc5d0;border-radius:8px;font-size:16px;text-align:center;letter-spacing:3px;text-transform:uppercase" maxlength="8" placeholder="접속코드" autocomplete="off">'
+   +'<button id="gb" style="width:100%;margin-top:10px;padding:10px;border:none;border-radius:8px;background:#c2185b;color:#fff;font-weight:700;font-size:14px;cursor:pointer">입장</button>'
+   +'<p id="gm" style="font-size:11px;color:#c0392b;height:14px;margin-top:6px"></p>'
+   +'<p style="font-size:10.5px;color:#99a;line-height:1.5;margin-top:4px">본 화면과 접속코드는 회사 내부용입니다.<br>외부(타인·타사) 제공을 금합니다.</p></div>';
+  document.body.appendChild(g);
+  const go=async()=>{const v=g.querySelector('#gc').value,bt=g.querySelector('#gb');
+    g.querySelector('#gm').textContent='';bt.disabled=true;bt.textContent='확인 중…';
+    const rs=await gateOk(v);
+    bt.disabled=false;bt.textContent='입장';
+    if(rs.ok){try{localStorage.setItem('wj_gate',String(v).trim().toUpperCase());}catch(e){}g.remove();boot();}
+    else g.querySelector('#gm').textContent=rs.msg||'코드가 올바르지 않습니다. 노무안전팀에 문의하세요.';};
+  g.querySelector('#gb').onclick=go;
+  g.querySelector('#gc').addEventListener('keydown',e=>{if(e.key==='Enter')go();});
+})();
+</script>
+</body>
+</html>
