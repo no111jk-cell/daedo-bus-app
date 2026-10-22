@@ -371,7 +371,7 @@ function drawPath(){
   if($('showPath').checked&&paths){
     selected().forEach((no,slot)=>{
       if(REVISED.has(String(no)))return;   // 개편 노선은 아래 실시간 정류장 경로 사용
-      (NO_GROUP[no]||[]).forEach(g=>{Object.values(paths[g]||{}).forEach(v=>{
+      (NO_GROUP[no]||[]).forEach(g=>{Object.entries(paths[g]||{}).filter(([k])=>!/^\d/.test(k)||k.split('(')[0].replace(/번$/,'')===String(no)).map(([,v])=>v).forEach(v=>{   // (10/22) 같은 그룹이라도 선택한 노선번호의 변형만(31 선택 시 34·34-1 안 그림)
         const pts=(v.path||[]).map(p=>new kakao.maps.LatLng(p[0],p[1]));if(pts.length<2)return;
         const pl=new kakao.maps.Polyline({path:pts,strokeWeight:4,strokeColor:SLOT_COL[slot],strokeOpacity:.5});pl.setMap(map);lines.push(pl);});});
     });
