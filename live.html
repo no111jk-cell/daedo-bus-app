@@ -247,7 +247,7 @@ const STALE_TICKS=3, DROP_TICKS=10, MAX_LOG=6000;
 
 /* ===================== 상태 ===================== */
 const $=id=>document.getElementById(id);
-let map=null, routes={}, routeMeta={}, paths=null, routeTimes=null;
+let map=null, routes={}, routeMeta={}, paths=null, routeTimes=null, extPaths=null;   // (10/22) extPaths = 타사·공영 계통 OSM 도로망 경로 {routeId:{path:[[lat,lon]…]}}
 let stopData={}, stopAll={}, stopOv=null;   // stopAll: 내장 노선도 기반 전 정류장 색인(1,875곳) — 노선 선택과 무관하게 검색·조회용
 let lines=[], stopOvs=[], pathSeq=0, extCache={}, extApiOk=null, routeMapInfo=null;
 try{Object.assign(extCache,JSON.parse(localStorage.getItem('wj_ext_v2')||'{}'));}catch(e){} // 노선도 캐시(v2: 26.8.24 100-2·90 개편 반영)
@@ -346,6 +346,7 @@ async function loadRoutes(){
 async function loadGH(){
   const get=async f=>{try{return await (await fetch('./'+f)).json();}catch(e){return await (await fetch(GH+f)).json();}};
   try{paths=await get('route_paths.json');}catch(e){paths=null;}
+  try{extPaths=await get('ext_paths.json');}catch(e){extPaths=null;}   // (10/22) 타사·공영 노선 도로망 경로 — 없으면 정류장 직선 연결로
   try{routeTimes=await get('route_times.json');}catch(e){routeTimes=null;}
   // ★내장 노선도(routemap.json, 2026-09-08 노선도수집기 산출) — 전 계통 정류장 순번·좌표를 미리 채워
   //   API 호출 없이 즉시 그림. 파일이 없으면 종전대로 실시간 API로 받음(기능 저하 없음).
@@ -406,9 +407,11 @@ async function drawPathExt(){
     });
     // 타사 노선 경로선(대도는 DTG선 사용)
     if((!daedo||REVISED.has(String(routeMeta[rid]?routeMeta[rid].no:'')))&&$('showPath').checked){
-      const dirs={};st.forEach(p=>{(dirs[p.ud]=dirs[p.ud]||[]).push(p);});
+      const ep=extPaths&&extPaths[rid]&&Array.isArray(extPaths[rid].path)&&extPaths[rid].path.length>1?extPaths[rid].path:null;   // (10/22) OSM 도로망 경로가 있으면 길을 따라 그림
+      if(ep){const pl=new kakao.maps.Polyline({path:ep.map(p=>new kakao.maps.LatLng(p[0],p[1])),strokeWeight:3,strokeColor:SLOT_COL[slotI],strokeOpacity:.55});pl.setMap(map);lines.push(pl);}
+      else{const dirs={};st.forEach(p=>{(dirs[p.ud]=dirs[p.ud]||[]).push(p);});
       Object.values(dirs).forEach(seg=>{if(seg.length<2)return;
-        const pl=new kakao.maps.Polyline({path:seg.map(p=>new kakao.maps.LatLng(p.lat,p.lon)),strokeWeight:3,strokeColor:SLOT_COL[slotI],strokeOpacity:.5});pl.setMap(map);lines.push(pl);});
+        const pl=new kakao.maps.Polyline({path:seg.map(p=>new kakao.maps.LatLng(p.lat,p.lon)),strokeWeight:3,strokeColor:SLOT_COL[slotI],strokeOpacity:.5});pl.setMap(map);lines.push(pl);});}
     }
     // 정류장 점 (전 노선 공통 · 클릭 시 정보)
     if($('showStops').checked){
@@ -563,7 +566,7 @@ function showSched(no){
 }
 function updateLegend(){
   const sel=selected();
-  $('legRoutes').innerHTML=(routeMapInfo&&routeMapInfo.n?'<span class="dim" title="routemap.json 내장 노선도">[내장 '+routeMapInfo.n+'계통 '+routeMapInfo.date+']</span> ':'')+sel.map((n,i)=>'<span class="sq" style="background:'+SLOT_COL[i]+'"></span><span class="schBtn" title="인가 시간표 보기" onclick="showSched(\''+esc(n)+'\')">'+esc(n)+'번</span>🕐 ').join('')||'<span style="color:#999">노선 미선택</span>';
+  $('legRoutes').innerHTML=(routeMapInfo&&routeMapInfo.n?'<span class="dim" title="routemap.json 내장 노선도">[내장 '+routeMapInfo.n+'계통 '+routeMapInfo.date+']</span> ':'')+(extPaths?'<span class="dim" title="ext_paths.json 도로망 경로">[도로망 '+Object.keys(extPaths).length+'계통]</span> ':'')+sel.map((n,i)=>'<span class="sq" style="background:'+SLOT_COL[i]+'"></span><span class="schBtn" title="인가 시간표 보기" onclick="showSched(\''+esc(n)+'\')">'+esc(n)+'번</span>🕐 ').join('')||'<span style="color:#999">노선 미선택</span>';
 }
 function paint(vs,now,stat){
   tickNo++;
