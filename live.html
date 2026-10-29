@@ -36,6 +36,17 @@
   .maparea{position:relative;flex:1;display:flex}
   #map{flex:1}
   #legend{position:absolute;left:10px;bottom:24px;z-index:3;background:rgba(255,255,255,.95);border:1px solid var(--line);border-radius:8px;padding:6px 10px;font-size:11px;line-height:1.7}
+  /* 도로 정체·거리 재기(10/29) */
+  button.on{background:#eceff1;border-color:#212121;color:#212121;font-weight:700}
+  #measBox{position:absolute;left:10px;top:10px;z-index:6;display:none;background:rgba(255,255,255,.97);border:1.5px solid #212121;border-radius:8px;padding:6px 10px;font-size:12px;line-height:1.6;box-shadow:0 2px 8px rgba(0,0,0,.2);max-width:320px}
+  #measBox b{color:#212121;font-size:15px}
+  #measBox button{padding:3px 8px;font-size:11.5px;margin-left:5px}
+  #measBox .mh{font-size:10.5px;color:#777}
+  @media (max-width:820px){#measBox{max-width:calc(100% - 90px)}}
+  #map.measuring,#map.measuring *{cursor:crosshair!important}
+  .measDot{width:9px;height:9px;border-radius:50%;background:#fff;border:2px solid #212121;pointer-events:none}
+  .measLbl{background:#fff;border:1px solid #212121;color:#212121;border-radius:4px;padding:0 5px;font-size:11px;font-weight:700;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.25);pointer-events:none}
+  .measLbl.fin{background:#212121;color:#fff;font-size:12px}
   .sq{display:inline-block;width:11px;height:11px;border-radius:3px;vertical-align:-1px}
   #schedOv{position:absolute;right:10px;top:10px;z-index:5;background:rgba(255,255,255,.98);border:1px solid var(--line);border-radius:10px;box-shadow:0 3px 12px rgba(0,0,0,.2);width:250px;max-height:72%;display:flex;flex-direction:column;font-size:12px}
   #schedOv .sh{padding:8px 10px;border-bottom:1px solid var(--line);font-weight:700;display:flex;align-items:center;gap:6px}
@@ -152,6 +163,8 @@
     <label class="tg"><input type="checkbox" id="showStops"> 정류장</label>
     <label class="tg"><input type="checkbox" id="showRt" checked> 라벨에 노선</label>
     <label class="tg"><input type="checkbox" id="follow"> 선택차량 따라가기</label>
+    <label class="tg" title="카카오 실시간 교통정보(도로 소통 색)를 지도에 겹쳐 봄"><input type="checkbox" id="showTraffic"> 도로 정체</label>
+    <button id="measBtn" title="지도를 눌러 가며 거리를 잼(PC는 오른쪽 클릭으로 마침)">📏 거리 재기</button>
     <button id="recBtn">● 기록</button>
     <button id="csvBtn">CSV</button>
     <span id="coChips" style="display:inline-flex;gap:4px;flex-wrap:wrap"></span>
@@ -168,7 +181,9 @@
       <span class="sq" style="background:var(--gong)"></span>공영(2×××)
       <span class="sq" style="background:var(--etc)"></span>기타 &nbsp;｜ 대도 차종: <span class="sq" style="background:#0277bd"></span><b>H₂</b> 수소전기 19대 <span class="sq" style="background:#c2185b"></span><b>CNG</b> 35대 &nbsp;｜ 동신 차종: <span class="fu fu-H2">H₂</span> 13대 <span class="fu fu-CNG">CNG</span> 55대 &nbsp;｜ 진평 차종: <span class="fu fu-CNG">CNG</span> 23대(전량) &nbsp;｜ 노선도: <span id="legRoutes"></span><br>
       <span style="color:#777">▲ 진행방향(추정) · 점선/반투명 = 신호 지연 · 위치는 BIS 정류장 통과 기준 · 정류장 점을 누르면 도착예정 표시</span>
+      <span id="legTraffic" style="display:none"><br>도로 정체(카카오 실시간 교통정보): <b style="color:#2e9d3a">초록</b> 원활 · <b style="color:#d4a106">노랑</b> 서행 · <b style="color:#d32f2f">빨강</b> 정체</span>
     </div>
+    <div id="measBox"></div>
     <div id="keywarn"><div>지도를 불러오지 못했습니다.<br>인터넷 연결과 카카오디벨로퍼스 [카카오맵] 활성화 상태를 확인해 주세요.</div></div>
   </div>
   <div id="panel">
@@ -263,7 +278,7 @@ let otherSeen={}, cfg={};
 const coFilter={'대도':true,'동신':true,'진평':true,'공영':true,'기타':true};
 try{otherSeen=JSON.parse(localStorage.getItem('wj_bus_roster')||'{}');}catch(e){}
 try{cfg=JSON.parse(localStorage.getItem('wj_ctl_cfg')||'{}');}catch(e){}
-function saveCfg(){try{localStorage.setItem('wj_ctl_cfg',JSON.stringify({routes:selected(),ivl:$('ivl').value,showPath:$('showPath').checked,showStops:$('showStops').checked,showRt:$('showRt').checked,co:coFilter}));}catch(e){}}
+function saveCfg(){try{localStorage.setItem('wj_ctl_cfg',JSON.stringify({routes:selected(),ivl:$('ivl').value,showPath:$('showPath').checked,showStops:$('showStops').checked,showRt:$('showRt').checked,showTraffic:$('showTraffic').checked,co:coFilter}));}catch(e){}}
 function saveRoster(){try{localStorage.setItem('wj_bus_roster',JSON.stringify(otherSeen));}catch(e){}}
 
 /* ===================== 유틸 ===================== */
@@ -419,7 +434,7 @@ async function drawPathExt(){
         const w=document.createElement('div');w.className='stopwrap';w.title=p.nm;
         const el=document.createElement('div');el.className='stopdot';el.style.border='3px solid '+SLOT_COL[slotI];
         w.appendChild(el);
-        w.onclick=ev=>{ev.stopPropagation();openStop(p.id);};
+        w.onclick=ev=>{ev.stopPropagation();if(meas.on){measAtClient(ev);return;}openStop(p.id);};
         const ov=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(p.lat,p.lon),content:w,zIndex:2,clickable:true});
         ov.setMap(map);stopOvs.push(ov);
       });
@@ -594,7 +609,7 @@ function paint(vs,now,stat){
       const el=busEl(v4,co,rt);
       const ov=new kakao.maps.CustomOverlay({position:new kakao.maps.LatLng(lat,lon),content:el,zIndex:co==='대도'?6:4});ov.setMap(map);
       e=vehMarks[vn]={ov,el,lat,lon,curLat:lat,curLon:lon,anim:null,tick:tickNo,v4,co,rt,first:ts};
-      el.onclick=()=>{hlVeh=v4;$('veh').value=(v4 in VEH_GRP)?v4:'';refreshHighlight();renderAll();};
+      el.onclick=()=>{if(meas.on)return;hlVeh=v4;$('veh').value=(v4 in VEH_GRP)?v4:'';refreshHighlight();renderAll();};
       if(co==='대도'&&(!seenAt[v4]||(+now-seenAt[v4])>10*60000)) addEvent(ts,v4,'출발/포착','🚌 '+rt+'번 · '+(b.nodenm||''));
     }else{ glide(e,lat,lon); e.tick=tickNo; e.el.classList.remove('stale'); }
     if(co==='대도') seenAt[v4]=+now;
@@ -617,7 +632,7 @@ function paint(vs,now,stat){
   const grps=new Set(selected().map(n=>NO_GRP[n]).filter(Boolean));
   const fleetShown=Object.entries(VEH_GRP).filter(([v4,g])=>grps.has(g)||seen4[v4]);
   // 따라가기
-  if($('follow').checked&&hlVeh){const fe=Object.values(vehMarks).find(e=>e.v4===hlVeh);if(fe)map.panTo(new kakao.maps.LatLng(fe.lat,fe.lon));}
+  if($('follow').checked&&hlVeh&&!(meas.on&&!meas.done)){const fe=Object.values(vehMarks).find(e=>e.v4===hlVeh);if(fe)map.panTo(new kakao.maps.LatLng(fe.lat,fe.lon));}
   // 상태줄
   const modeNm=selected().map(n=>n+'번').join('·')+(skipped?' (타번호 '+skipped+'대 제외)':'');
   if(quotaHit) setLed('bad','⚠ API 일일 트래픽 한도 초과(코드22) — 공공데이터포털에서 트래픽 증가 신청 필요, 내일 0시 초기화');
@@ -784,6 +799,89 @@ function acUpdate(){
   acIdx=-1;acRender();
 }
 
+/* ===================== 도로 정체·거리 재기(10/29) ===================== */
+let trafficOn=false;
+function applyTraffic(){
+  if(!map)return;const on=$('showTraffic').checked;
+  if(on&&!trafficOn)map.addOverlayMapTypeId(kakao.maps.MapTypeId.TRAFFIC);
+  if(!on&&trafficOn)map.removeOverlayMapTypeId(kakao.maps.MapTypeId.TRAFFIC);
+  trafficOn=on;const lg=$('legTraffic');if(lg)lg.style.display=on?'':'none';
+}
+const MEAS_COL='#212121';   // 측정선 = 검정(+흰 바탕선) — 교통 빨강·노선 색과 겹치지 않게
+const meas={on:false,done:false,path:[],line:null,base:null,tmp:null,ovs:[]};
+const MEAS_TOUCH=!!(window.matchMedia&&matchMedia('(pointer:coarse)').matches);
+function measFmt(m){return m>=1000?(m/1000).toFixed(2)+' km':Math.round(m)+' m';}
+function measLen(){return meas.line?meas.line.getLength():0;}
+function measClear(){
+  [meas.line,meas.base,meas.tmp].forEach(o=>{if(o)o.setMap(null);});meas.ovs.forEach(o=>o.setMap(null));
+  meas.line=null;meas.base=null;meas.tmp=null;meas.ovs=[];meas.path=[];meas.done=false;
+}
+function measAtClient(ev){   // 정류장 점처럼 지도 클릭을 막는 오버레이 위에서 누른 자리 → 측정점
+  const r=$('map').getBoundingClientRect();
+  measClick({latLng:map.getProjection().coordsFromContainerPoint(new kakao.maps.Point(ev.clientX-r.left,ev.clientY-r.top))});
+}
+function measMark(pos,txt,fin){
+  const d=document.createElement('div');d.className='measDot';
+  const o1=new kakao.maps.CustomOverlay({position:pos,content:d,zIndex:30});o1.setMap(map);
+  const l=document.createElement('div');l.className='measLbl'+(fin?' fin':'');l.textContent=txt;
+  const o2=new kakao.maps.CustomOverlay({position:pos,content:l,yAnchor:1.7,zIndex:31});o2.setMap(map);
+  meas.ovs.push(o1,o2);
+}
+function measRender(){
+  const b=$('measBox');if(!meas.on){b.style.display='none';b.innerHTML='';return;}
+  b.style.display='block';const n=meas.path.length;
+  const off='<button id="measOff">✕ 끄기</button>';
+  if(!n) b.innerHTML='📏 <b>거리 재기</b>'+off+'<div class="mh">지도에서 시작점을 누르세요</div>';
+  else if(meas.done) b.innerHTML='📏 총 <b>'+measFmt(measLen())+'</b> <span class="mh">(점 '+n+'개)</span><button id="measClr">지우기</button>'+off+'<div class="mh">지도를 다시 누르면 새로 잽니다</div>';
+  else b.innerHTML='📏 <b id="measVal">'+measFmt(measLen())+'</b> <span class="mh">(점 '+n+'개)</span><button id="measFin">이 선 끝내기</button><button id="measClr">지우기</button>'+off
+    +'<div class="mh">'+(MEAS_TOUCH?'이어서 누르면 점이 추가됨 · [이 선 끝내기]를 누르면 총거리':'이어서 누르면 점 추가 · 오른쪽 클릭·더블클릭·Esc로도 끝냄')+'</div>';
+  const f=$('measFin');if(f)f.onclick=measEnd;
+  const c=$('measClr');if(c)c.onclick=()=>{measClear();measRender();};
+  const o=$('measOff');if(o)o.onclick=measToggle;
+}
+function measClick(e){
+  if(!meas.on)return;
+  if(!meas.done&&meas.path.length){   // 같은 자리 두 번(더블클릭 등)은 무시
+    const pr=map.getProjection(),a=pr.containerPointFromCoords(meas.path[meas.path.length-1]),c=pr.containerPointFromCoords(e.latLng);
+    if(Math.abs(a.x-c.x)+Math.abs(a.y-c.y)<5)return;
+  }
+  if(meas.done)measClear();
+  const p=e.latLng;meas.path.push(p);
+  if(!meas.line){
+    meas.base=new kakao.maps.Polyline({path:[p],strokeWeight:7,strokeColor:'#fff',strokeOpacity:.9,strokeStyle:'solid',zIndex:29});meas.base.setMap(map);
+    meas.line=new kakao.maps.Polyline({path:[p],strokeWeight:3,strokeColor:MEAS_COL,strokeOpacity:.95,strokeStyle:'solid',zIndex:30});meas.line.setMap(map);
+  }
+  else{meas.line.setPath(meas.path);meas.base.setPath(meas.path);}
+  if(meas.tmp)meas.tmp.setMap(null);
+  measMark(p,meas.path.length===1?'시작':measFmt(measLen()),false);
+  measRender();
+}
+function measMove(e){
+  if(!meas.on||meas.done||!meas.path.length)return;
+  const seg=[meas.path[meas.path.length-1],e.latLng];
+  if(!meas.tmp)meas.tmp=new kakao.maps.Polyline({path:seg,strokeWeight:3,strokeColor:MEAS_COL,strokeOpacity:.5,strokeStyle:'dash',zIndex:30});
+  else meas.tmp.setPath(seg);
+  meas.tmp.setMap(map);
+  const v=$('measVal');if(v)v.textContent=measFmt(measLen()+meas.tmp.getLength());
+}
+function measEnd(){
+  if(!meas.on||meas.done)return;
+  if(meas.tmp)meas.tmp.setMap(null);
+  if(meas.path.length<2){measClear();measRender();return;}
+  meas.done=true;
+  const lastLbl=meas.ovs.pop();if(lastLbl)lastLbl.setMap(null);   // 마지막 점 라벨 → 총거리 라벨로 교체
+  const l=document.createElement('div');l.className='measLbl fin';l.textContent='총 '+measFmt(measLen());
+  const o=new kakao.maps.CustomOverlay({position:meas.path[meas.path.length-1],content:l,yAnchor:1.7,zIndex:31});o.setMap(map);meas.ovs.push(o);
+  measRender();
+}
+function measToggle(){
+  meas.on=!meas.on;const b=$('measBtn');b.classList.toggle('on',meas.on);b.textContent=meas.on?'📏 거리 재기 끄기':'📏 거리 재기';
+  $('map').classList.toggle('measuring',meas.on);
+  if(meas.on){closeStop();if(window.innerWidth<=820){$('hdrBody').classList.remove('open');relayout();}}   // 휴대폰은 메뉴를 접어 지도를 넓힘
+  else measClear();
+  measRender();
+}
+
 /* ===================== 타이머·초기화 ===================== */
 function setTimer(){
   if(timer){clearInterval(timer);timer=null;}
@@ -799,7 +897,7 @@ function init(){
   document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
   // 설정 복원
   if(cfg.ivl!==undefined)$('ivl').value=String(cfg.ivl);
-  ['showPath','showStops','showRt'].forEach(k=>{if(cfg[k]!==undefined)$(k).checked=!!cfg[k];});
+  ['showPath','showStops','showRt','showTraffic'].forEach(k=>{if(cfg[k]!==undefined)$(k).checked=!!cfg[k];});
   if(cfg.co)Object.keys(coFilter).forEach(k=>{if(cfg.co[k]!==undefined)coFilter[k]=!!cfg.co[k];});
   // 회사 칩
   const cc=$('coChips');
@@ -826,6 +924,19 @@ function init(){
   $('showPath').onchange=()=>{drawPath();saveCfg();};
   $('showStops').onchange=()=>{drawPath();saveCfg();};
   $('showRt').onchange=()=>{Object.values(vehMarks).forEach(e=>{const r=e.el.querySelector('.rt');if(r)r.style.display=$('showRt').checked?'':'none';});saveCfg();};
+  try{ // 도로 정체·거리 재기(10/29) — 실패해도 기존 관제는 그대로
+    applyTraffic();
+    $('showTraffic').onchange=()=>{applyTraffic();saveCfg();};
+    $('measBtn').onclick=measToggle;
+    kakao.maps.event.addListener(map,'click',measClick);
+    kakao.maps.event.addListener(map,'mousemove',measMove);
+    kakao.maps.event.addListener(map,'rightclick',()=>{if(meas.on)measEnd();});
+    kakao.maps.event.addListener(map,'dblclick',()=>{if(meas.on&&!meas.done)measEnd();});
+    document.addEventListener('keydown',e=>{   // 검색창 등 입력 칸에서 누른 Esc는 측정에 쓰지 않음
+      if(e.key!=='Escape'||!meas.on||meas.done)return;
+      if(e.target&&e.target.closest&&e.target.closest('input,textarea,select'))return;
+      measEnd();});
+  }catch(e){console.warn('도로 정체·거리 재기 초기화 실패',e);}
   $('panelToggle').onclick=()=>{$('panel').classList.toggle('min');relayout();};
   $('hdrToggle').onclick=()=>{$('hdrBody').classList.toggle('open');relayout();};
   if(window.innerWidth<=820){$('panel').classList.add('min');}
