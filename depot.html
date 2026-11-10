@@ -58,7 +58,8 @@ footer .legend i{display:inline-block;width:.8em;height:.8em;border-radius:.2em;
 .tools button.on{background:#1f4b8a;border-color:#4f8ad6}
 #banner{display:none;margin:0 0 .6em;padding:.5em .8em;border-radius:.5em;background:#4e2a04;color:#ffe0b2;font-size:.9em}
 #banner.show{display:block}
-@media (max-width:480px){header h1{font-size:1.1em}header .sub{display:none}#stxt{display:none}.veh{font-size:1.5em}.eta b{font-size:1.9em}}
+@media (max-width:1000px){#stxt{display:none}header .sub{display:none}}
+@media (max-width:480px){header h1{font-size:1.1em}.veh{font-size:1.5em}.eta b{font-size:1.9em}}
 </style>
 </head>
 <body>
@@ -247,7 +248,8 @@ function render(shown,unk,hiddenFar){
   $('list').innerHTML=html;
   const n=shown.length;
   $('cnt').textContent=n?('복귀 중 '+n+'대'):'복귀 중인 차량 없음';
-  $('upd').textContent=(doneRows.length?'도착 '+doneRows.length+'대 · ':'')+(hiddenFar>0&&!farOn?'먼 차 '+hiddenFar+'대 숨김 · ':'')+(unk.length?'확인 중 '+unk.length+' · ':'')+'30초마다 갱신';
+  const lo=lastOk||new Date();
+  $('upd').textContent=(doneRows.length?'도착 '+doneRows.length+'대 · ':'')+(hiddenFar>0&&!farOn?'먼 차 '+hiddenFar+'대 숨김 · ':'')+(unk.length?'확인 중 '+unk.length+' · ':'')+'갱신 '+pad(lo.getHours())+':'+pad(lo.getMinutes())+':'+pad(lo.getSeconds())+' · 30초마다';
   const e=$('empty');
   if(!html){ const h=new Date().getHours(); e.innerHTML=(h<4||h>=24)?'<b>운행 시간이 아닙니다</b>첫차 출고 뒤부터 표시됩니다':'<b>지금 차고지로 들어오는 차가 없습니다</b>가까운 차가 생기면 자동으로 표시됩니다'; e.style.display=''; }
   else e.style.display='none';
