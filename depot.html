@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#0b2545">
+<title>차고지 복귀 예정 — 대도여객</title>
+<link rel="manifest" href="depot_manifest.json">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🚌</text></svg>">
+<style>
+:root{--bg:#0b1a2e;--card:#13294b;--card2:#0f2140;--txt:#f3f6fb;--dim:#9fb1c9;--line:#27406b;
+      --soon:#e53935;--near:#fb8c00;--far:#1e88e5;--done:#43a047;--est:#8e24aa;--fs:1}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);
+  font-family:"Malgun Gothic","맑은 고딕","Apple SD Gothic Neo","Noto Sans KR",sans-serif;font-size:calc(16px*var(--fs))}
+body{display:flex;flex-direction:column;min-height:100vh}
+header{display:flex;align-items:center;gap:.6em;padding:.55em .9em;background:#0b2545;border-bottom:2px solid #1f4b8a;position:sticky;top:0;z-index:5}
+header h1{margin:0;font-size:1.35em;font-weight:800;letter-spacing:-.02em;white-space:nowrap}
+header .sub{color:var(--dim);font-size:.85em;white-space:nowrap}
+header .sp{flex:1}
+#clock{font-size:1.35em;font-weight:800;font-variant-numeric:tabular-nums;white-space:nowrap}
+#led{width:.75em;height:.75em;border-radius:50%;background:#555;box-shadow:0 0 0 2px #0b2545 inset;flex:none}
+#led.ok{background:#43a047}#led.warn{background:#fbc02d}#led.bad{background:#e53935}
+#stxt{color:var(--dim);font-size:.8em;white-space:nowrap;max-width:28em;overflow:hidden;text-overflow:ellipsis}
+main{flex:1;padding:.8em .9em 1em}
+#summary{display:flex;align-items:baseline;gap:.8em;margin:0 0 .6em;flex-wrap:wrap}
+#summary b{font-size:1.25em}
+#summary .dim{color:var(--dim);font-size:.9em}
+#list{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,21em),1fr));gap:.7em}
+.card{display:grid;grid-template-columns:auto 1fr auto;grid-template-rows:auto auto;column-gap:.8em;row-gap:.15em;align-items:center;
+  background:var(--card);border:1px solid var(--line);border-left:.55em solid var(--far);border-radius:.7em;padding:.7em .9em}
+.card.soon{border-left-color:var(--soon);background:#2a1a24}
+.card.near{border-left-color:var(--near)}
+.card.done{border-left-color:var(--done);background:#12301c}
+.card.est{border-left-color:var(--est)}
+.card.unk{opacity:.7;border-left-color:#607d8b}
+.badge{grid-row:1/3;display:flex;align-items:center;justify-content:center;min-width:3.2em;height:3.2em;padding:0 .35em;border-radius:.6em;
+  background:#1f4b8a;color:#fff;font-weight:900;font-size:1.25em;letter-spacing:-.03em}
+.veh{font-size:1.8em;font-weight:900;letter-spacing:-.02em;line-height:1.1;white-space:nowrap}
+.veh small{font-size:.5em;font-weight:700;color:var(--dim);margin-left:.3em;vertical-align:middle}
+.eta{grid-row:1/3;text-align:right;white-space:nowrap}
+.eta b{display:block;font-size:2.2em;font-weight:900;line-height:1;font-variant-numeric:tabular-nums}
+.eta span{display:block;color:var(--dim);font-size:.85em;margin-top:.2em}
+.soon .eta b{color:#ff6f60}.near .eta b{color:#ffb74d}.done .eta b{color:#81c784}.est .eta b{color:#ce93d8}
+.where{color:var(--dim);font-size:.95em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.where b{color:var(--txt);font-weight:700}
+.tag{display:inline-block;margin-left:.4em;padding:.05em .45em;border-radius:.4em;background:#27406b;color:#cfe0ff;font-size:.72em;font-weight:700;vertical-align:middle}
+#empty{padding:2.2em 1em;text-align:center;color:var(--dim);font-size:1.15em;border:1px dashed var(--line);border-radius:.7em}
+#empty b{display:block;color:var(--txt);font-size:1.3em;margin-bottom:.3em}
+footer{padding:.6em .9em .9em;color:var(--dim);font-size:.74em;line-height:1.5;border-top:1px solid var(--line)}
+footer .legend span{display:inline-block;margin-right:.9em;white-space:nowrap}
+footer .legend i{display:inline-block;width:.8em;height:.8em;border-radius:.2em;margin-right:.3em;vertical-align:-.08em}
+.tools{display:flex;gap:.45em;flex-wrap:wrap;margin-top:.5em}
+.tools button{font:inherit;font-size:.95em;padding:.35em .7em;border-radius:.5em;border:1px solid var(--line);background:#13294b;color:var(--txt)}
+.tools button.on{background:#1f4b8a;border-color:#4f8ad6}
+#banner{display:none;margin:0 0 .6em;padding:.5em .8em;border-radius:.5em;background:#4e2a04;color:#ffe0b2;font-size:.9em}
+#banner.show{display:block}
+@media (max-width:480px){header h1{font-size:1.1em}header .sub{display:none}#stxt{display:none}.veh{font-size:1.5em}.eta b{font-size:1.9em}}
+</style>
+</head>
+<body>
+<header>
+  <span style="font-size:1.4em">🚌</span>
+  <h1>장양리 차고지 복귀 예정</h1>
+  <span class="sub">대도여객 차량만 · 시청 안내기와 같은 도착예정</span>
+  <span class="sp"></span>
+  <span id="led"></span><span id="stxt">준비 중…</span>
+  <span id="clock">--:--:--</span>
+</header>
+<main>
+  <div id="banner"></div>
+  <div id="summary"><b id="cnt">—</b><span class="dim" id="upd">아직 조회 전</span></div>
+  <div id="list"></div>
+  <div id="empty" style="display:none"></div>
+</main>
+<footer>
+  <div class="legend">
+    <span><i style="background:var(--soon)"></i>3분 안 도착</span>
+    <span><i style="background:var(--near)"></i>10분 안</span>
+    <span><i style="background:var(--far)"></i>10분 넘음</span>
+    <span><i style="background:var(--done)"></i>도착(5분간 표시)</span>
+    <span><i style="background:var(--est)"></i>추정 = 시청 도착예정에 아직 안 잡힌 차 · 9~11월 실측 중앙값으로 계산</span>
+  </div>
+  <div>자료: 원주시 버스정보시스템(국토부 TAGO 공개 API) 차고지 정류장 도착예정 + 차량 위치(정류장 통과 기준). 대도여객 차량(13○○호)만 표시, 30초마다 자동 갱신. 「분」은 시청 안내기 도착예정을 지금 위치로 비례 조정한 값이라 1~3분 차이 날 수 있음. 노선 끝이 차고지가 아닌 편(100-2·통학·공차 회송)은 보이지 않음. 노무안전팀.</div>
+  <div class="tools">
+    <button id="bFs">글자 크게</button>
+    <button id="bWake">화면 켜둠</button>
+    <button id="bSnd">도착 알림음</button>
+    <button id="bFar">먼 차도 보기</button>
+    <button id="bNow">지금 갱신</button>
+  </div>
+</footer>
+<script>
+'use strict';
+/* ===== 설정 ===== */
+const KEY='2BwOvsCVUB%2FNobU%2BYTo5LaFsL%2FI1ZiErlQ1NdTvAdRqrxR1tYweMGurrbtGi%2FMu78eO0p523%2F1zoHtv74XQPQQ%3D%3D';  // 관제 live.html과 같은 키(운영계정)
+const CITY='32020';
+const DEPOT_ID='WJB251031074';         // 장양리 차고지(도착 쪽 정류장) — 전 노선 복귀편의 마지막 정류장
+const GH='https://raw.githubusercontent.com/no111jk-cell/daedo-bus-app/main/';
+const PERIOD=30000;                     // 갱신 주기(ms)
+const HORIZON=45;                       // 이보다 남은 정류장이 많으면 '먼 차'(기본 숨김)
+const FAR_MIN=60;                       // 이보다 오래 걸리면 '먼 차'
+const DONE_KEEP=5*60*1000;              // 도착 표시 유지 시간
+const $=id=>document.getElementById(id);
+let D=null, nLive={}, period=PERIOD, timer=null, busy=false, lastOk=null, lastRows=[], quotaHit=false;
+let done={};            // v4 -> {t, no}  도착 표시
+let prevNear={};        // v4 -> 지난 조회의 남은 정류장(소실 시 도착 판정용)
+let soundOn=false, farOn=false, wakeLock=null, audioCtx=null, alerted={};
+const company=vn=>{const m=String(vn).match(/(\d{4})$/);if(!m)return '기타';const h=m[1].slice(0,2);
+  if(h==='13')return '대도';if(h==='15'||h==='16'||h==='70')return '동신';if(h==='10'||h==='11')return '진평';if(m[1][0]==='2')return '공영';return '기타';};
+const v4of=vn=>{const m=String(vn).match(/(\d{4})$/);return m?m[1]:String(vn);};
+const esc=s=>String(s??'').replace(/&/g,'&amp;').replace(/</g,'&lt;');
+const pad=n=>String(n).padStart(2,'0');
+function setLed(c,t){$('led').className=c;$('stxt').textContent=t;}
+setInterval(()=>{const d=new Date();$('clock').textContent=pad(d.getHours())+':'+pad(d.getMinutes())+':'+pad(d.getSeconds());},500);
+
+/* ===== API (관제와 같은 방식: JSON, 초당 제한·일일 한도 감지) ===== */
+const bucket=[]; let rps=6;                 // 초당 호출 상한(토큰 버킷) — 관제 화면과 키를 같이 쓰므로 보수적으로
+async function rateSlot(){ for(;;){ const now=Date.now(); while(bucket.length&&now-bucket[0]>1000) bucket.shift(); if(bucket.length<rps){bucket.push(now);return;} await new Promise(z=>setTimeout(z,80+Math.random()*80)); } }
+async function api(path,params,retry=0){
+  await rateSlot();
+  const u='https://apis.data.go.kr/1613000/'+path+'?serviceKey='+KEY+'&_type=json&'+params;
+  const ctl=new AbortController(); const tm=setTimeout(()=>ctl.abort(),10000);   // 10초 안에 답 없으면 포기(한 건이 멈춰도 전체가 멈추지 않게)
+  try{
+    const t=await (await fetch(u,{cache:'no-store',signal:ctl.signal})).text();
+    if(t.includes('PER_SECOND_EXCEEDS')){ rps=Math.max(3,rps-1); if(retry<4){await new Promise(z=>setTimeout(z,600+retry*500));return api(path,params,retry+1);} return null; }
+    if(t.includes('LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS')){ quotaHit=true; return null; }
+    if(t.includes('cmmMsgHeader')){ if(retry<1){await new Promise(z=>setTimeout(z,400));return api(path,params,retry+1);} return null; }
+    const j=JSON.parse(t); let it=j?.response?.body?.items?.item;
+    if(it===undefined||it===''||it===null) return [];
+    return Array.isArray(it)?it:[it];
+  }catch(e){ if(retry<1){await new Promise(z=>setTimeout(z,400));return api(path,params,retry+1);} return null; }
+  finally{ clearTimeout(tm); }
+}
+async function pool(items,worker,limit){const q=[...items];let active=0;return new Promise(done=>{const next=()=>{if(!q.length&&active===0){done();return;}
+  while(active<limit&&q.length){active++;worker(q.shift()).catch(()=>{}).finally(()=>{active--;next();});}};next();});}
+
+/* ===== 정적 자료(계통·정류장 수·소요 표) ===== */
+async function loadData(){
+  const get=async f=>{try{const r=await fetch('./'+f,{cache:'no-cache'});if(!r.ok)throw 0;return await r.json();}catch(e){return await (await fetch(GH+f)).json();}};
+  D=await get('depot_data.json');
+  try{const c=JSON.parse(localStorage.getItem('dp_nlive')||'{}');if(c.d===new Date().toDateString())nLive=c.n||{};}catch(e){}
+}
+const nOf=rid=>nLive[rid]||(D&&D.routes[rid]?D.routes[rid].n:0);
+const noOf=(rid,fallback)=>(D&&D.routes[rid]?D.routes[rid].no:(fallback||'?'));
+// 계통의 실제 정류장 수를 하루 1회 실측(노선 개편으로 정적 자료와 달라졌을 때 대비)
+const nPending=new Set();
+async function ensureN(rid){
+  if(nLive[rid]||nPending.has(rid)) return; nPending.add(rid);
+  const st=await api('BusRouteInfoInqireService/getRouteAcctoThrghSttnList','cityCode='+CITY+'&routeId='+rid+'&numOfRows=500&pageNo=1');
+  nPending.delete(rid);
+  if(st&&st.length){ const last=st.reduce((a,b)=>(+b.nodeord>+a.nodeord?b:a)); if(String(last.nodeid)===DEPOT_ID){ nLive[rid]=+last.nodeord;
+    try{localStorage.setItem('dp_nlive',JSON.stringify({d:new Date().toDateString(),n:nLive}));}catch(e){} } }
+}
+function estMin(no,rem){ // 실측 중앙값 표(없으면 정류장당 1.1분)
+  const t=D&&D.eta[no]; if(t){ const v=t[String(rem)]; if(v) return v[0]; const ks=Object.keys(t).map(Number).sort((a,b)=>a-b); const k=ks.filter(x=>x<=rem).pop(); if(k) return t[String(k)][0]+(rem-k)*1.1; }
+  return rem*1.1;
+}
+
+/* ===== 조회 ===== */
+let busySince=0;
+async function refresh(){
+  if(busy&&Date.now()-busySince>45000){ busy=false; }        // 45초 넘게 묶여 있으면 멈춘 것으로 보고 다시 시작
+  if(busy||!D) return; busy=true; busySince=Date.now();
+  try{
+    setLed(lastOk?'ok':'warn','조회 중…');
+    const arr=await api('ArvlInfoInqireService/getSttnAcctoArvlPrearngeInfoList','cityCode='+CITY+'&nodeId='+DEPOT_ID+'&numOfRows=80&pageNo=1');
+    if(arr===null){ fail('도착예정 응답 없음'); return; }
+    // 계통별 도착예정 묶음
+    const byRid={};
+    arr.forEach(a=>{const rid=String(a.routeid||'');if(!rid)return;(byRid[rid]=byRid[rid]||[]).push({rem:+a.arrprevstationcnt||0,sec:+a.arrtime||0,low:/저상/.test(String(a.vehicletp||'')),no:String(a.routeno||''),used:false});});
+    // 차량 위치를 볼 계통: 도착예정에 잡힌 계통(먼 것 제외) + 지난번 가까이 있던 차의 계통
+    const lim=farOn?999:HORIZON;
+    const rids=new Set(Object.keys(byRid).filter(r=>byRid[r].some(x=>x.rem<=lim)));
+    lastRows.forEach(r=>{if(r.rid&&r.rem<=lim&&r.rem>0)rids.add(r.rid);});
+    const veh=[]; let vfail=0;
+    await pool([...rids],async rid=>{
+      const lst=await api('BusLcInfoInqireService/getRouteAcctoBusLcList','cityCode='+CITY+'&routeId='+rid+'&numOfRows=100&pageNo=1');
+      if(lst===null){vfail++;return;}
+      const n=nOf(rid); if(!n) return;
+      lst.forEach(v=>{const ord=+v.nodeord||0;if(!ord)return;
+        veh.push({rid,no:noOf(rid,v.routenm),v4:v4of(v.vehicleno),co:company(v.vehicleno),ord,rem:n-ord,nm:String(v.nodenm||'')});});
+    },3);
+    // 차량 ↔ 도착예정 짝 맞추기(같은 계통). 도착예정(TAGO)은 몇 분에 한 번만 갱신돼 차량 위치보다 늦으므로
+    // 도착예정의 남은 정류장 수 ≥ 차량의 남은 정류장 수(−1 허용) 이고 차이 8 이하인 것 중 가장 가까운 것을 짝으로 봄.
+    // 분은 도착예정 초를 「지금 남은 정류장 ÷ 그때 남은 정류장」으로 비례 조정(그때 교통 상황을 반영한 정류장당 소요)
+    const rows=[];
+    veh.sort((a,b)=>a.rem-b.rem).forEach(v=>{
+      let best=null,bd=99;
+      (byRid[v.rid]||[]).forEach(a=>{if(a.used)return;const d=a.rem-v.rem;if(d>=-1&&d<=8&&Math.abs(d)<bd){bd=Math.abs(d);best=a;}});
+      let sec=null;
+      if(best){best.used=true; sec=best.rem>0?Math.round(best.sec*Math.max(v.rem,0)/best.rem):best.sec;}
+      rows.push({rid:v.rid,no:v.no,v4:v.v4,co:v.co,rem:v.rem,nm:v.nm,sec,low:best?best.low:false,src:best?'bis':'est'});
+    });
+    const okRid=new Set(veh.map(v=>v.rid));   // 차량 위치 응답이 온 계통(여기서 대도 차와 못 맞춘 도착예정은 타사 차로 봄)
+    // 대도 차량만 남김
+    const now=Date.now();
+    let mine=rows.filter(r=>r.co==='대도');
+    // 도착 판정: 마지막 정류장 통과(rem<=0) 또는 지난번 2정류장 안에 있던 차가 이번에 사라짐
+    mine.forEach(r=>{if(r.rem<=0&&!done[r.v4])done[r.v4]={t:now,no:r.no};});
+    Object.keys(prevNear).forEach(v4=>{ if(!mine.some(r=>r.v4===v4)&&!done[v4]&&!vfail) done[v4]={t:now,no:prevNear[v4].no}; });
+    prevNear={}; mine.forEach(r=>{if(r.rem>0&&r.rem<=2)prevNear[r.v4]={no:r.no};});
+    Object.keys(done).forEach(v4=>{if(now-done[v4].t>DONE_KEEP)delete done[v4];});
+    mine=mine.filter(r=>r.rem>0);
+    // 표시용 분 계산
+    mine.forEach(r=>{ r.min=r.src==='bis'?Math.max(0,Math.round(r.sec/60)):Math.round(estMin(r.no,r.rem)); });
+    // 도착예정엔 있는데 그 계통의 차량 위치 응답을 못 받은 것(가까운 것만) — 「차량 확인 중」(응답을 받았는데 대도 차가 없으면 타사 차 → 표시 안 함)
+    const unk=[];
+    Object.keys(byRid).forEach(rid=>{ if(okRid.has(rid)) return; byRid[rid].forEach(a=>{ if(!a.used&&a.rem<=12) unk.push({rid,no:noOf(rid,a.no),v4:'',rem:a.rem,min:Math.max(0,Math.round(a.sec/60)),src:'unk',nm:''}); }); });
+    // 먼 차 숨김
+    const shown=mine.filter(r=>farOn||(r.rem<=HORIZON&&r.min<=FAR_MIN));
+    shown.sort((a,b)=>a.min-b.min||a.rem-b.rem);
+    unk.sort((a,b)=>a.min-b.min);
+    lastRows=mine; lastOk=new Date();
+    window.__dbg={t:new Date().toISOString(),arr,byRid,veh,rows,vfail,nLive:{...nLive}};
+    const pend=[...rids].find(r=>!nLive[r]&&!nPending.has(r)); if(pend) ensureN(pend);   // 정류장 수 실측은 한 번에 1계통만(초당 제한 보호)
+    render(shown,unk,mine.length-shown.length);
+    if(soundOn) chimeFor(shown);
+    setLed(vfail?'warn':'ok',(vfail?'일부 계통 응답 없음 · ':'')+'갱신 '+pad(lastOk.getHours())+':'+pad(lastOk.getMinutes())+':'+pad(lastOk.getSeconds()));
+    if(quotaHit){ period=120000; $('banner').textContent='⚠ 공개 API 일일 한도에 걸려 2분마다만 갱신함(내일 0시 초기화). 관제 화면도 같은 영향. 노무안전팀에 알려 주세요.'; $('banner').classList.add('show'); }
+  }catch(e){ fail('오류: '+(e.message||e)); }
+  finally{ busy=false; schedule(); }
+}
+function fail(msg){ setLed('bad',msg+(lastOk?' · 마지막 성공 '+pad(lastOk.getHours())+':'+pad(lastOk.getMinutes()):'')); busy=false; schedule(); }
+function schedule(){ clearTimeout(timer); const h=new Date().getHours(); const p=(h>=0&&h<4)?300000:period; timer=setTimeout(()=>{ if(document.hidden){schedule();return;} refresh(); },p); }
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden){ clearTimeout(timer); refresh(); } });
+
+/* ===== 그리기 ===== */
+const COL={'13':'#c62828','16':'#00796b','16-1':'#c84f86','90':'#6a1b9a','31':'#5d4037','34':'#5d4037','34-1':'#5d4037','30':'#37474f','32':'#37474f','50':'#2e7d32','21':'#0277bd','22':'#0277bd','23':'#0277bd','24':'#0277bd','25':'#0277bd','81':'#ad1457','82':'#283593','3':'#6b7f1f','3-1':'#6b7f1f','4':'#ef6c00','4-1':'#ef6c00'};
+function card(r){
+  const cls=r.src==='unk'?'unk':(r.src==='est'?'est':(r.min<=3?'soon':(r.min<=10?'near':'')));
+  const etaTxt=r.min<=0?'곧 도착':(r.min+'<small style="font-size:.45em;font-weight:700"> 분 뒤</small>');
+  const sub=(r.src==='est'?'추정 · ':'')+r.rem+' 정류장 전';
+  const who=r.src==='unk'?'<span class="veh" style="font-size:1.2em;color:var(--dim)">차량 확인 중</span>':'<span class="veh">'+esc(r.v4)+'<small>호</small>'+(r.low?'<span class="tag">저상</span>':'')+'</span>';
+  const where=r.nm?'<span class="where">현재 <b>'+esc(r.nm)+'</b></span>':'<span class="where">위치 신호 대기</span>';
+  return '<div class="card '+cls+'"><div class="badge" style="background:'+(COL[r.no]||'#1f4b8a')+'">'+esc(r.no)+'</div>'+who+where+'<div class="eta"><b>'+etaTxt+'</b><span>'+sub+'</span></div></div>';
+}
+function render(shown,unk,hiddenFar){
+  const now=Date.now();
+  const doneRows=Object.keys(done).map(v4=>({v4,no:done[v4].no,t:done[v4].t})).sort((a,b)=>b.t-a.t);
+  let html=shown.map(card).join('');
+  html+=doneRows.map(d=>{const ago=Math.round((now-d.t)/60000);return '<div class="card done"><div class="badge" style="background:'+(COL[d.no]||'#1f4b8a')+'">'+esc(d.no)+'</div><span class="veh">'+esc(d.v4)+'<small>호</small></span><span class="where">차고지 도착</span><div class="eta"><b>도착</b><span>'+(ago<=0?'방금':ago+'분 전')+'</span></div></div>';}).join('');
+  html+=unk.map(card).join('');
+  $('list').innerHTML=html;
+  const n=shown.length;
+  $('cnt').textContent=n?('복귀 중 '+n+'대'):'복귀 중인 차량 없음';
+  $('upd').textContent=(doneRows.length?'도착 '+doneRows.length+'대 · ':'')+(hiddenFar>0&&!farOn?'먼 차 '+hiddenFar+'대 숨김 · ':'')+(unk.length?'확인 중 '+unk.length+' · ':'')+'30초마다 갱신';
+  const e=$('empty');
+  if(!html){ const h=new Date().getHours(); e.innerHTML=(h<4||h>=24)?'<b>운행 시간이 아닙니다</b>첫차 출고 뒤부터 표시됩니다':'<b>지금 차고지로 들어오는 차가 없습니다</b>가까운 차가 생기면 자동으로 표시됩니다'; e.style.display=''; }
+  else e.style.display='none';
+}
+
+/* ===== 알림음·화면 켜둠·글자 크기 ===== */
+function beep(){ try{ audioCtx=audioCtx||new (window.AudioContext||window.webkitAudioContext)(); const o=audioCtx.createOscillator(),g=audioCtx.createGain(); o.type='sine'; o.frequency.value=880; g.gain.value=.0001; o.connect(g); g.connect(audioCtx.destination);
+  const t=audioCtx.currentTime; g.gain.exponentialRampToValueAtTime(.25,t+.02); g.gain.exponentialRampToValueAtTime(.0001,t+.6); o.start(t); o.stop(t+.65);
+  setTimeout(()=>{const o2=audioCtx.createOscillator(),g2=audioCtx.createGain();o2.type='sine';o2.frequency.value=1175;g2.gain.value=.0001;o2.connect(g2);g2.connect(audioCtx.destination);const t2=audioCtx.currentTime;g2.gain.exponentialRampToValueAtTime(.25,t2+.02);g2.gain.exponentialRampToValueAtTime(.0001,t2+.6);o2.start(t2);o2.stop(t2+.65);},250); }catch(e){} }
+function chimeFor(shown){ let hit=false; shown.forEach(r=>{ if(r.min<=3&&!alerted[r.v4]){alerted[r.v4]=Date.now();hit=true;} }); Object.keys(alerted).forEach(k=>{if(Date.now()-alerted[k]>20*60000)delete alerted[k];}); if(hit) beep(); }
+$('bSnd').onclick=()=>{ soundOn=!soundOn; $('bSnd').classList.toggle('on',soundOn); if(soundOn) beep(); };
+async function wake(){ try{ if('wakeLock' in navigator){ wakeLock=await navigator.wakeLock.request('screen'); wakeLock.addEventListener('release',()=>{$('bWake').classList.remove('on');}); $('bWake').classList.add('on'); } else { setLed('warn','이 브라우저는 화면 켜둠 기능이 없음 — 기기 설정에서 화면 꺼짐 시간을 늘려 주세요'); } }catch(e){ setLed('warn','화면 켜둠 실패: '+e.message); } }
+$('bWake').onclick=()=>{ if(wakeLock){ wakeLock.release(); wakeLock=null; $('bWake').classList.remove('on'); } else wake(); };
+document.addEventListener('visibilitychange',()=>{ if(!document.hidden&&$('bWake').classList.contains('on')&&!wakeLock) wake(); });
+const FS=[1,1.25,1.5]; let fsI=+(localStorage.getItem('dp_fs')||0);
+function applyFs(){ document.documentElement.style.setProperty('--fs',FS[fsI]); $('bFs').textContent='글자 크기 '+['보통','크게','아주 크게'][fsI]; try{localStorage.setItem('dp_fs',fsI);}catch(e){} }
+$('bFs').onclick=()=>{ fsI=(fsI+1)%FS.length; applyFs(); }; applyFs();
+$('bFar').onclick=()=>{ farOn=!farOn; $('bFar').classList.toggle('on',farOn); clearTimeout(timer); refresh(); };
+$('bNow').onclick=()=>{ clearTimeout(timer); refresh(); };
+
+/* ===== 시작 ===== */
+(async()=>{
+  try{ await loadData(); }catch(e){ setLed('bad','기본 자료(depot_data.json)를 못 읽음 — 인터넷 연결 확인'); return; }
+  refresh();
+})();
+</script>
+</body>
+</html>
