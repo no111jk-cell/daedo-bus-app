@@ -131,7 +131,7 @@ async function api(path,params,retry=0){
   const ctl=new AbortController(); const tm=setTimeout(()=>ctl.abort(),10000);   // 10초 안에 답 없으면 포기(한 건이 멈춰도 전체가 멈추지 않게)
   try{
     const r=await fetch(u,{cache:'no-store',signal:ctl.signal}); const t=await r.text();
-    if(r.status===429||t.includes('PER_SECOND_EXCEEDS')){ lockUntil=Date.now()+LOCK_MS; rps=Math.max(2,rps-1); return null; }   // 초당 한도 → 60초 잠금
+    if(!t.includes('LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS')&&(r.status===429||t.includes('PER_SECOND_EXCEEDS'))){ lockUntil=Date.now()+LOCK_MS; rps=Math.max(2,rps-1); return null; }   // 초당 한도 → 60초 잠금
     if(t.includes('LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS')){ quotaHit=true; return null; }
     if(t.includes('cmmMsgHeader')){ if(retry<1){await sleep(1200);return api(path,params,retry+1);} return null; }
     const j=JSON.parse(t); const rc=String(j?.response?.header?.resultCode??'');

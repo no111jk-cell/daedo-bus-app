@@ -346,7 +346,7 @@ async function api(path,params,retry=0){
   await rateSlot();
   try{
     const r0=await fetch(u); const t=await r0.text();
-    if(r0.status===429||t.includes('PER_SECOND_EXCEEDS')){ // 코드23/HTTP 429: 초당 제한 → 60초 잠금 뒤 한 번만 재시도
+    if(!t.includes('LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS')&&(r0.status===429||t.includes('PER_SECOND_EXCEEDS'))){ // 코드23/HTTP 429: 초당 제한 → 60초 잠금 뒤 한 번만 재시도
       rateHit++; rps=Math.max(3,rps-1); rpsClean=0; lockUntil=Date.now()+LOCK_MS;
       if(retry<1){return api(path,params,retry+1);}   // rateSlot이 잠금 해제까지 기다림
       return null;
