@@ -333,10 +333,11 @@ async function pool(items,worker,limit){const q=[...items];let active=0;return n
 window.addEventListener('error',e=>{try{setLed('bad','오류: '+(e.message||'알 수 없는 오류'));}catch(_){}});
 
 /* ===================== API (초당 제한 준수·적응형) ===================== */
-let quotaHit=false, rateHit=0, rps=12, rpsClean=0;
+let quotaHit=false, rateHit=0, rps=6, rpsClean=0;   // 초당 상한 6(게이트웨이 한도 키당 10/초 — 차고지 화면과 키 공용, 11/11)
+let lockUntil=0; const LOCK_MS=62000;                 // 한도를 넘기면 약 60초간 전부 429 → 그동안 호출 안 함
 const bucket={t:[]};
 async function rateSlot(){ // 초당 rps건 이하로 발사 간격 조절
-  for(;;){const now=Date.now();bucket.t=bucket.t.filter(x=>now-x<1000);
+  for(;;){const now=Date.now(); if(now<lockUntil){await new Promise(z=>setTimeout(z,500));continue;} bucket.t=bucket.t.filter(x=>now-x<1000);
     if(bucket.t.length<rps){bucket.t.push(now);return;}
     await new Promise(z=>setTimeout(z,60+Math.random()*60));}
 }
@@ -344,10 +345,10 @@ async function api(path,params,retry=0){
   const u='https://apis.data.go.kr/1613000/'+path+'?serviceKey='+KEY+'&_type=json&'+params;
   await rateSlot();
   try{
-    const t=await (await fetch(u)).text();
-    if(t.includes('PER_SECOND_EXCEEDS')){ // 코드23: 초당 제한 → 감속 후 재시도
-      rateHit++; rps=Math.max(5,Math.floor(rps*0.6)); rpsClean=0;
-      if(retry<5){await new Promise(z=>setTimeout(z,500+retry*400));return api(path,params,retry+1);}
+    const r0=await fetch(u); const t=await r0.text();
+    if(r0.status===429||t.includes('PER_SECOND_EXCEEDS')){ // 코드23/HTTP 429: 초당 제한 → 60초 잠금 뒤 한 번만 재시도
+      rateHit++; rps=Math.max(3,rps-1); rpsClean=0; lockUntil=Date.now()+LOCK_MS;
+      if(retry<1){return api(path,params,retry+1);}   // rateSlot이 잠금 해제까지 기다림
       return null;
     }
     if(t.includes('LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS')){quotaHit=true;return null;} // 코드22: 일일 한도
@@ -564,7 +565,7 @@ async function refresh(){
       if(list===null){err++;return;} ok++;
       list.forEach(b=>{if(b.vehicleno){b._rid=rid;buses[b.vehicleno]=b;}});
     },12);
-    if(rateHit===rateBefore){rpsClean++; if(rpsClean>=2&&rps<12){rps=Math.min(12,rps+2);rpsClean=0;}}
+    if(rateHit===rateBefore){rpsClean++; if(rpsClean>=2&&rps<6){rps=Math.min(6,rps+1);rpsClean=0;}}
     commFail=(ok===0&&err>0); partialFail=(err>0&&ok>0);
     if(!commFail) lastOkAt=new Date();
     lastVs=Object.values(buses); lastTs=new Date();
