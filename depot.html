@@ -280,9 +280,43 @@ $('bFar').onclick=()=>{ farOn=!farOn; $('bFar').classList.toggle('on',farOn); cl
 $('bNow').onclick=()=>{ if(Date.now()<lockUntil) return; if(busy){ setLed('warn','조회 중…'); return; } clearTimeout(timer); refresh(); };
 
 /* ===== 시작 ===== */
-(async()=>{
+async function start(){
   try{ await loadData(); }catch(e){ setLed('bad','기본 자료(depot_data.json)를 못 읽음 — 인터넷 연결 확인'); return; }
   refresh();
+}
+/* ===== 입장 코드(11/11) — 코드가 맞아야 조회를 시작함. 코드 원문은 이 파일에 없음(SHA-256 해시 4개만).
+   회수 = 해당 해시를 지우고 다시 배포 / 한 번 입장한 기기는 기억해 다시 묻지 않음(dp_gate) ===== */
+const GATE=[
+'0d684b43c3e46c2d5eb803c695c801e3b607e9b6427c7de422afee29f9e81c33',
+'cff98619d271de33a871577a3187bb563e0967ad3f07288c7014968bf8aed800',
+'c36a6dd487aaa788b7eb9b5ce2790712e448928466e70df5e2928371dcbd9e05',
+'2d1fbd80bee38d99c5bb1acbeed4ab9d06d1f407e7f63577c3dd2708d881b772'
+];
+async function sha(t){ const b=await crypto.subtle.digest('SHA-256',new TextEncoder().encode(t)); return [...new Uint8Array(b)].map(x=>x.toString(16).padStart(2,'0')).join(''); }
+(async()=>{
+  if(!(window.crypto&&crypto.subtle)||location.protocol==='file:'){ start(); return; }   // 로컬 파일 시험은 통과
+  let h=''; try{ h=localStorage.getItem('dp_gate')||''; }catch(e){}
+  if(h&&GATE.includes(h)){ start(); return; }
+  const g=document.createElement('div');
+  g.style.cssText='position:fixed;inset:0;z-index:9999;background:#eef2f7;display:flex;align-items:center;justify-content:center;padding:20px';
+  g.innerHTML='<div style="background:#fff;border:1px solid #d5dde8;border-radius:14px;padding:30px 26px;max-width:380px;width:100%;box-sizing:border-box;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.12)">'
+   +'<div style="font-size:34px">🚌</div><h2 style="font-size:20px;margin:8px 0 6px;color:#12305a">장양리 차고지 복귀 안내</h2>'
+   +'<p style="font-size:15px;color:#445;line-height:1.6;margin:0 0 14px">회사 내부용 화면입니다.<br><b>입장 코드</b>를 입력하세요.</p>'
+   +'<input id="gc" inputmode="numeric" maxlength="8" autocomplete="off" placeholder="입장 코드" style="width:100%;box-sizing:border-box;padding:14px;border:1px solid #b5c1d0;border-radius:10px;font-size:24px;text-align:center;letter-spacing:6px">'
+   +'<button id="gb" style="width:100%;margin-top:12px;padding:14px;border:none;border-radius:10px;background:#004090;color:#fff;font-weight:700;font-size:18px;cursor:pointer">입장</button>'
+   +'<p id="gm" style="font-size:14px;color:#b3261e;min-height:20px;margin:8px 0 0"></p>'
+   +'<p style="font-size:12px;color:#667;line-height:1.5;margin:4px 0 0">코드는 노무안전팀에 문의하세요.<br>한 번 입장하면 이 기기에서는 다시 묻지 않습니다.</p></div>';
+  document.body.appendChild(g);
+  let bad=0, waitUntil=0;
+  const go=async()=>{ const inp=g.querySelector('#gc'), bt=g.querySelector('#gb'), m=g.querySelector('#gm');
+    if(Date.now()<waitUntil){ m.textContent=Math.ceil((waitUntil-Date.now())/1000)+'초 뒤 다시 입력해 주세요.'; return; }
+    const v=String(inp.value||'').trim().toUpperCase(); if(!v) return;
+    bt.disabled=true; let x=''; try{ x=await sha('depot|'+v); }catch(e){} bt.disabled=false;
+    if(x&&GATE.includes(x)){ try{ localStorage.setItem('dp_gate',x); }catch(e){} g.remove(); start(); }
+    else { bad++; inp.value=''; if(bad>=5){ bad=0; waitUntil=Date.now()+60000; m.textContent='5번 틀렸습니다. 1분 뒤 다시 입력해 주세요.'; } else m.textContent='코드가 맞지 않습니다.'; } };
+  g.querySelector('#gb').onclick=go;
+  g.querySelector('#gc').addEventListener('keydown',e=>{ if(e.key==='Enter') go(); });
+  setTimeout(()=>{ try{ g.querySelector('#gc').focus(); }catch(e){} },100);
 })();
 </script>
 </body>
